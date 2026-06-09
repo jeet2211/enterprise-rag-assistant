@@ -1,0 +1,40 @@
+from functools import lru_cache
+import json
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    gemini_api_key: str = ""
+    model_name: str = "gemini-2.5-flash"
+    chunk_size: int = 1000
+    chunk_overlap: int = 200
+    top_k: int = 5
+    max_file_mb: int = 50
+    session_memory_k: int = 10
+    chroma_persist_dir: str = "./backend/chroma_db"
+    upload_dir: str = "./backend/uploads"
+    db_url: str = "sqlite:///./backend/app.db"
+    log_level: str = "INFO"
+    cors_origins_raw: str = Field(default='["http://localhost:5173","http://localhost:4173"]', alias="CORS_ORIGINS")
+    rate_limit_chat: str = "10/minute"
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def cors_origins(self) -> list[str]:
+        raw = self.cors_origins_raw
+        if isinstance(raw, list):
+            return raw
+        try:
+            value = json.loads(raw)
+            return value if isinstance(value, list) else [str(value)]
+        except Exception:
+            return [origin.strip() for origin in str(raw).split(",") if origin.strip()]
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()
+
