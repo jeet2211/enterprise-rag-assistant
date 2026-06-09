@@ -3,7 +3,7 @@ uvicorn[standard]==0.30.6
 langchain==0.3.0
 langchain-community==0.3.0
 langchain-google-genai==2.0.0
-google-generativeai==0.8.0
+google-generativeai==0.7.2
 chromadb==0.5.15
 sentence-transformers==3.1.1
 pymupdf==1.24.10
@@ -14,3 +14,16 @@ python-dotenv==1.0.1
 sqlalchemy==2.0.35
 aiofiles==24.1.0
 slowapi==0.1.9
+protobuf==4.25.8
+google-api-core==2.28.0
+grpcio-status==1.62.0
+opentelemetry-api==1.27.0
+opentelemetry-sdk==1.27.0
+opentelemetry-proto==1.27.0
+opentelemetry-exporter-otlp-proto-common==1.27.0
+opentelemetry-exporter-otlp-proto-grpc==1.27.0
+opentelemetry-instrumentation==0.48b0
+opentelemetry-instrumentation-asgi==0.48b0
+opentelemetry-instrumentation-fastapi==0.48b0
+opentelemetry-semantic-conventions==0.48b0
+opentelemetry-util-http==0.48b0
