@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-WORKDIR /app
+WORKDIR /app/backend
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -12,9 +12,9 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app ./app
+COPY . .
 
-RUN mkdir -p /app/uploads /app/chroma_db /app/data
+RUN mkdir -p /app/backend/uploads /app/backend/chroma_db /app/backend/data
 
 EXPOSE 8000
 
