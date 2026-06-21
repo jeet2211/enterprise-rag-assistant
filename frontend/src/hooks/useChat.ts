@@ -66,6 +66,7 @@ export function useChat() {
                   ...message,
                   content: response.answer,
                   citations: response.citations,
+                  suggestedQuestions: response.suggested_questions,
                   isPending: false,
                 }
               : message
@@ -104,4 +105,3 @@ export function useChat() {
     clearError: () => setError(null),
   }
 }
-

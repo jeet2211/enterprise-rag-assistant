@@ -25,7 +25,7 @@ def limit_chat(limit_value):
 @router.post("", response_model=ChatResponse)
 @limit_chat(get_settings().rate_limit_chat)
 def chat(request: Request, payload: ChatRequest, chat_service=Depends(get_chat_service)):
-    answer, citations = chat_service.answer(
+    answer, citations, suggested_questions = chat_service.answer(
         question=payload.question,
         session_id=payload.session_id,
         top_k=payload.top_k,
@@ -33,6 +33,7 @@ def chat(request: Request, payload: ChatRequest, chat_service=Depends(get_chat_s
     return ChatResponse(
         answer=answer,
         citations=citations,
+        suggested_questions=suggested_questions,
         session_id=payload.session_id,
         sources_used=len(citations),
     )

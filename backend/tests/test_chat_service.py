@@ -45,10 +45,11 @@ def test_chat_service_falls_back_without_llm():
     memory = SessionMemoryStore(window_size=2)
     service = ChatService(retriever, settings, memory)
 
-    answer, citations = service.answer(question="What does it say?", session_id="session-123", top_k=3)
+    answer, citations, suggestions = service.answer(question="What does it say?", session_id="session-123", top_k=3)
 
     assert "Gemini is not configured" in answer
     assert citations == [Citation(document_name="policy.pdf", page_number=5, chunk_preview="Policy excerpt")]
+    assert suggestions[0].startswith("Show the exact passage")
     history = memory.render("session-123")
     assert "USER: What does it say?" in history
     assert "ASSISTANT:" in history
@@ -73,10 +74,11 @@ def test_chat_service_uses_llm_when_available():
     fake_llm = FakeLLM()
     service._llm = fake_llm
 
-    answer, citations = service.answer(question="Summarize it", session_id="session-456", top_k=1)
+    answer, citations, suggestions = service.answer(question="Summarize it", session_id="session-456", top_k=1)
 
     assert answer == "Generated answer from Gemini"
     assert citations[0].document_name == "guide.pdf"
+    assert len(suggestions) == 3
     assert fake_llm.prompts
     assert "Summarize it" in fake_llm.prompts[0]
 
@@ -102,10 +104,11 @@ def test_chat_service_loads_llm_from_dependency(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "langchain_google_genai", types.SimpleNamespace(ChatGoogleGenerativeAI=ImportedLLM))
 
-    answer, citations = service.answer(question="Use the dependency", session_id="session-789", top_k=1)
+    answer, citations, suggestions = service.answer(question="Use the dependency", session_id="session-789", top_k=1)
 
     assert answer == "Imported LLM answer"
     assert citations == []
+    assert len(suggestions) == 3
     assert isinstance(service._llm, ImportedLLM)
 
 
@@ -115,10 +118,15 @@ def test_chat_service_falls_back_when_no_citations():
     memory = SessionMemoryStore(window_size=2)
     service = ChatService(retriever, settings, memory)
 
-    answer, citations = service.answer(question="Unknown question", session_id="session-999", top_k=1)
+    answer, citations, suggestions = service.answer(question="Unknown question", session_id="session-999", top_k=1)
 
     assert "could not find a relevant answer" in answer.lower()
     assert citations == []
+    assert suggestions == [
+        "Ask about a specific document title or page number.",
+        "Try a broader question about the uploaded PDFs.",
+        "Upload another PDF if you want more grounded answers.",
+    ]
 
 
 def test_session_memory_store_limits_turns():
@@ -168,7 +176,7 @@ def test_chat_service_deduplicates_citations():
     memory = SessionMemoryStore(window_size=2)
     service = ChatService(retriever, settings, memory)
 
-    answer, citations = service.answer(question="Test question", session_id="session-dup", top_k=3)
+    answer, citations, suggestions = service.answer(question="Test question", session_id="session-dup", top_k=3)
 
     assert len(citations) == 2
     assert citations[0].document_name == "policy.pdf"
@@ -177,3 +185,27 @@ def test_chat_service_deduplicates_citations():
     assert citations[1].document_name == "policy.pdf"
     assert citations[1].page_number == 6
     assert citations[1].chunk_preview == "Preview 3"
+    assert suggestions[2] == "Compare policy.pdf p.5 with policy.pdf p.6."
+
+
+def test_chat_service_suggests_follow_up_questions_from_citations():
+    retriever = FakeRetriever(
+        results=[
+            {
+                "text": "Important excerpt",
+                "metadata": {
+                    "document_name": "policy.pdf",
+                    "page_number": 5,
+                    "chunk_preview": "Important excerpt",
+                },
+            }
+        ]
+    )
+    settings = Settings(gemini_api_key="")
+    memory = SessionMemoryStore(window_size=2)
+    service = ChatService(retriever, settings, memory)
+
+    _, _, suggestions = service.answer(question="What does the policy say?", session_id="session-suggestions", top_k=1)
+
+    assert suggestions[0] == 'Show the exact passage that supports "What does the policy say?".'
+    assert suggestions[1] == "Summarize the key ideas from policy.pdf page 5."

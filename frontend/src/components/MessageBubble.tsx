@@ -4,9 +4,10 @@ import type { Message } from '../types'
 
 interface MessageBubbleProps {
   message: Message
+  onSuggestionSelect: (question: string) => void
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, onSuggestionSelect }: MessageBubbleProps) {
   const isUser = message.role === 'user'
 
   return (
@@ -40,8 +41,21 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             ))}
           </div>
         ) : null}
+        {!isUser && !message.isPending && message.suggestedQuestions && message.suggestedQuestions.length > 0 ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {message.suggestedQuestions.map((suggestion) => (
+              <button
+                key={suggestion}
+                type="button"
+                onClick={() => onSuggestionSelect(suggestion)}
+                className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-left text-xs leading-5 text-cyan-50 transition hover:border-cyan-200/40 hover:bg-cyan-300/20"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   )
 }
-

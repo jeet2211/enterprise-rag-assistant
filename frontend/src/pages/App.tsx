@@ -68,6 +68,7 @@ export function App() {
             messages={chat.messages}
             sending={chat.sending}
             onSend={chat.sendMessage}
+            onSuggestionSelect={chat.sendMessage}
             onClearConversation={chat.clearConversation}
             onToggleSidebar={() => setSidebarOpen((value) => !value)}
             sidebarOpen={sidebarOpen}
@@ -88,4 +89,3 @@ export function App() {
     </div>
   )
 }
-

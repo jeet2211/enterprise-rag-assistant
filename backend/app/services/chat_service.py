@@ -82,16 +82,17 @@ class ChatService:
         history = self.memory_store.render(session_id)
         prompt = build_prompt(history=history, context="\n\n".join(context_parts), question=question)
         llm = self._load_llm()
+        suggested_questions = self._build_follow_up_questions(question, citations)
 
         if llm is None:
             answer = self._fallback_answer(question, citations)
             self.memory_store.add_turn(session_id, question, answer)
-            return answer, citations
+            return answer, citations, suggested_questions
 
         response = llm.invoke(prompt)
         answer = response.content if hasattr(response, "content") else str(response)
         self.memory_store.add_turn(session_id, question, answer)
-        return answer, citations
+        return answer, citations, suggested_questions
 
     def _fallback_answer(self, question: str, citations: list[Citation]) -> str:
         if not citations:
@@ -101,3 +102,31 @@ class ChatService:
             )
         source_text = ", ".join(f"{c.document_name} p.{c.page_number}" for c in citations[:3])
         return f"I found related content in {source_text}, but Gemini is not configured. Set GEMINI_API_KEY to get a generated answer."
+
+    def _build_follow_up_questions(self, question: str, citations: list[Citation]) -> list[str]:
+        trimmed_question = " ".join(question.split())
+        if len(trimmed_question) > 96:
+            trimmed_question = f"{trimmed_question[:93].rstrip()}..."
+
+        if not citations:
+            return [
+                "Ask about a specific document title or page number.",
+                "Try a broader question about the uploaded PDFs.",
+                "Upload another PDF if you want more grounded answers.",
+            ]
+
+        primary = citations[0]
+        suggestions = [
+            f'Show the exact passage that supports "{trimmed_question}".',
+            f"Summarize the key ideas from {primary.document_name} page {primary.page_number}.",
+        ]
+
+        if len(citations) > 1:
+            secondary = citations[1]
+            suggestions.append(
+                f"Compare {primary.document_name} p.{primary.page_number} with {secondary.document_name} p.{secondary.page_number}."
+            )
+        else:
+            suggestions.append("What other details in this document connect to the answer?")
+
+        return suggestions[:3]

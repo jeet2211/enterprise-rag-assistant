@@ -6,6 +6,7 @@ interface ChatWindowProps {
   messages: Message[]
   sending: boolean
   onSend: (message: string) => Promise<void>
+  onSuggestionSelect: (question: string) => Promise<void> | void
   onClearConversation: () => void
   onToggleSidebar: () => void
   sidebarOpen: boolean
@@ -15,6 +16,7 @@ export function ChatWindow({
   messages,
   sending,
   onSend,
+  onSuggestionSelect,
   onClearConversation,
   onToggleSidebar,
   sidebarOpen,
@@ -75,7 +77,7 @@ export function ChatWindow({
           ) : (
             <div className="space-y-4">
               {messages.map((message) => (
-                <MessageBubble key={message.id} message={message} />
+                <MessageBubble key={message.id} message={message} onSuggestionSelect={onSuggestionSelect} />
               ))}
             </div>
           )}
@@ -106,4 +108,3 @@ export function ChatWindow({
     </section>
   )
 }
-

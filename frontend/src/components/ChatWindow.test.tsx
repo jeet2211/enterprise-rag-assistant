@@ -11,6 +11,7 @@ describe('ChatWindow', () => {
         messages={[]}
         sending={false}
         onSend={onSend}
+        onSuggestionSelect={vi.fn()}
         onClearConversation={vi.fn()}
         onToggleSidebar={vi.fn()}
         sidebarOpen={false}
@@ -33,6 +34,7 @@ describe('ChatWindow', () => {
         messages={[]}
         sending={false}
         onSend={vi.fn()}
+        onSuggestionSelect={vi.fn()}
         onClearConversation={onClearConversation}
         onToggleSidebar={vi.fn()}
         sidebarOpen={false}
@@ -42,5 +44,33 @@ describe('ChatWindow', () => {
     fireEvent.click(screen.getByRole('button', { name: /clear conversation/i }))
 
     expect(onClearConversation).toHaveBeenCalled()
+  })
+
+  it('renders and sends suggested follow-up questions', async () => {
+    const onSuggestionSelect = vi.fn().mockResolvedValue(undefined)
+
+    render(
+      <ChatWindow
+        messages={[
+          {
+            id: 'msg-1',
+            role: 'assistant',
+            content: 'Generated answer',
+            suggestedQuestions: ['Summarize the key ideas from policy.pdf page 5.'],
+            timestamp: new Date().toISOString(),
+          },
+        ]}
+        sending={false}
+        onSend={vi.fn()}
+        onSuggestionSelect={onSuggestionSelect}
+        onClearConversation={vi.fn()}
+        onToggleSidebar={vi.fn()}
+        sidebarOpen={false}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /summarize the key ideas/i }))
+
+    expect(onSuggestionSelect).toHaveBeenCalledWith('Summarize the key ideas from policy.pdf page 5.')
   })
 })

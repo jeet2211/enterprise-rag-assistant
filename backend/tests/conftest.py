@@ -71,6 +71,11 @@ class FakeChatService:
                 Citation(document_name="policy.pdf", page_number=2, chunk_preview="Relevant excerpt"),
                 Citation(document_name="guide.pdf", page_number=7, chunk_preview="Supporting excerpt"),
             ],
+            [
+                "Show the exact passage that supports the answer.",
+                "Summarize the key ideas from policy.pdf page 2.",
+                "Compare policy.pdf page 2 with guide.pdf page 7.",
+            ],
         )
 
 

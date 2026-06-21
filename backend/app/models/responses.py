@@ -20,6 +20,7 @@ class Citation(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     citations: list[Citation]
+    suggested_questions: list[str]
     session_id: str
     sources_used: int
 

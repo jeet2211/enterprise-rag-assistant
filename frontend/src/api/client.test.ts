@@ -25,6 +25,7 @@ describe('api client', () => {
       json: vi.fn().mockResolvedValue({
         answer: 'hello',
         citations: [],
+        suggested_questions: [],
         session_id: 'session-1',
         sources_used: 0,
       }),

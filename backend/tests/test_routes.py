@@ -111,6 +111,7 @@ def test_chat_route_formats_response(client, test_app):
     assert response.status_code == 200
     assert payload["answer"] == "Answer for What is in the document?"
     assert payload["sources_used"] == 2
+    assert payload["suggested_questions"][0].startswith("Show the exact passage")
     assert payload["citations"][0]["document_name"] == "policy.pdf"
     assert test_app.state.chat_service.calls[0]["session_id"] == "session-123"
 

@@ -25,6 +25,7 @@ describe('useChat', () => {
           chunk_preview: 'Relevant excerpt',
         },
       ],
+      suggested_questions: ['Show the exact passage that supports the answer.'],
       session_id: 'session-1',
       sources_used: 1,
     })
@@ -48,6 +49,7 @@ describe('useChat', () => {
     expect(result.current.messages[0].content).toBe('What does the policy say?')
     expect(result.current.messages[1].content).toBe('Generated answer')
     expect(result.current.messages[1].citations).toHaveLength(1)
+    expect(result.current.messages[1].suggestedQuestions).toEqual(['Show the exact passage that supports the answer.'])
   })
 
   it('keeps the conversation usable when the backend fails', async () => {

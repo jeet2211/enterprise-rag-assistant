@@ -23,6 +23,7 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   citations?: Citation[]
+  suggestedQuestions?: string[]
   timestamp: string
   isPending?: boolean
 }
@@ -36,6 +37,7 @@ export interface ChatRequest {
 export interface ChatResponse {
   answer: string
   citations: Citation[]
+  suggested_questions: string[]
   session_id: string
   sources_used: number
 }
@@ -46,4 +48,3 @@ export interface UploadResponse {
   status: string
   message: string
 }
-
