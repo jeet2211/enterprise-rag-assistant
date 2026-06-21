@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import threading
-from functools import lru_cache
+from typing import Optional
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -10,7 +10,7 @@ from sentence_transformers import SentenceTransformer
 class EmbeddingService:
     def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
         self.model_name = model_name
-        self._model: SentenceTransformer | None = None
+        self._model: Optional[SentenceTransformer] = None
         self._lock = threading.Lock()
 
     def _load(self) -> SentenceTransformer:
@@ -31,4 +31,3 @@ class EmbeddingService:
     @property
     def ready(self) -> bool:
         return self._model is not None
-

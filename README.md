@@ -106,6 +106,50 @@ If you run the frontend locally, make sure `VITE_API_BASE_URL` points to the bac
 VITE_API_BASE_URL=http://localhost:8000/api/v1
 ```
 
+## Testing
+
+Backend test setup:
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest
+```
+
+Frontend test setup:
+
+```bash
+cd frontend
+npm install
+npm run test
+```
+
+Coverage reports:
+
+```bash
+cd backend
+pytest --cov=app --cov-report=term-missing
+```
+
+```bash
+cd frontend
+npm run test:coverage
+```
+
+The backend suite covers:
+
+- Settings parsing and validation
+- PDF upload validation
+- Chunking, retrieval, embedding, and PDF wrappers
+- Document CRUD and pipeline behavior
+- Health, upload, chat, and document API routes
+
+The frontend suite covers:
+
+- API client wrappers
+- `useChat` and `useDocuments` state flows
+- The chat composer UI
+
 ## Endpoints
 
 - `POST /api/v1/upload` - upload a PDF

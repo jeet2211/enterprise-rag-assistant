@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     cors_origins_raw: str = Field(default='["http://localhost:5173","http://localhost:4173"]', alias="CORS_ORIGINS")
     rate_limit_chat: str = "10/minute"
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore", protected_namespaces=())
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", protected_namespaces=('settings_',))
 
     @property
     def cors_origins(self) -> list[str]:

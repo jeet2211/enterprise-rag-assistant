@@ -9,7 +9,7 @@ from app.models.responses import DeleteResponse, DocumentDetail, DocumentListIte
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
-def _serialize_document(doc) -> DocumentListItem | DocumentDetail:
+def _serialize_document(doc) -> DocumentListItem:
     return DocumentListItem(
         id=doc.id,
         filename=doc.filename,
@@ -63,4 +63,3 @@ def delete_document(document_id: str, request: Request):
     pipeline.delete_document(document_id, doc.file_path)
     service.delete_document(document_id)
     return DeleteResponse(document_id=document_id, status="deleted", message="Document deleted successfully.")
-

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from typing import Optional
 
 from app.models.responses import Citation
 from app.rag.prompt import build_prompt
@@ -44,10 +45,10 @@ class ChatService:
         )
         return self._llm
 
-    def answer(self, *, question: str, session_id: str, top_k: int | None = None):
+    def answer(self, *, question: str, session_id: str, top_k: Optional[int] = None):
         matches = self.retriever.search(question, top_k=top_k or self.settings.top_k)
         context_parts = []
-        citations: list[Citation] = []
+        citation_map = {}
         for match in matches:
             metadata = match["metadata"] or {}
             document_name = str(metadata.get("document_name", "Unknown document"))
@@ -56,11 +57,25 @@ class ChatService:
             context_parts.append(
                 f"[{document_name} p.{page_number}] {match['text']}"
             )
+            key = (document_name, page_number)
+            if key not in citation_map:
+                citation_map[key] = {
+                    "document_name": document_name,
+                    "page_number": page_number,
+                    "previews": [chunk_preview]
+                }
+            else:
+                if chunk_preview not in citation_map[key]["previews"]:
+                    citation_map[key]["previews"].append(chunk_preview)
+
+        citations: list[Citation] = []
+        for val in citation_map.values():
+            merged_preview = "\n\n[...]\n\n".join(val["previews"])
             citations.append(
                 Citation(
-                    document_name=document_name,
-                    page_number=page_number,
-                    chunk_preview=chunk_preview,
+                    document_name=val["document_name"],
+                    page_number=val["page_number"],
+                    chunk_preview=merged_preview,
                 )
             )
 
@@ -86,4 +101,3 @@ class ChatService:
             )
         source_text = ", ".join(f"{c.document_name} p.{c.page_number}" for c in citations[:3])
         return f"I found related content in {source_text}, but Gemini is not configured. Set GEMINI_API_KEY to get a generated answer."
-

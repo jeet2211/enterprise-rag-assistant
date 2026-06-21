@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 
 import chromadb
 
@@ -28,7 +29,7 @@ class Retriever:
         ]
         self.collection.upsert(ids=ids, documents=texts, embeddings=embeddings, metadatas=metadatas)
 
-    def search(self, query: str, top_k: int = 5, document_ids: list[str] | None = None) -> list[dict[str, object]]:
+    def search(self, query: str, top_k: int = 5, document_ids: Optional[list[str]] = None) -> list[dict[str, object]]:
         if not query.strip():
             return []
         where = {"doc_id": {"$in": document_ids}} if document_ids else None
@@ -58,4 +59,3 @@ class Retriever:
     def healthcheck(self) -> bool:
         self.collection.count()
         return True
-

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import fitz
 
 
-@dataclass(slots=True)
+@dataclass
 class PageText:
     page_number: int
     text: str
@@ -20,4 +20,3 @@ class PDFService:
                 text = page.get_text("text").strip()
                 pages.append(PageText(page_number=index + 1, text=text))
         return pages
-

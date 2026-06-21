@@ -3,12 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-@dataclass(slots=True)
+@dataclass
 class Chunk:
     text: str
     page_number: int
     chunk_index: int
-
 
 class Chunker:
     def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
@@ -40,4 +39,3 @@ class Chunker:
         for page_number, text in pages:
             items.extend(self.chunk_page(text, page_number))
         return items
-

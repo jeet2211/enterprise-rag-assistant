@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
+from typing import Optional
 
 from sqlalchemy import select
 
@@ -34,7 +35,7 @@ class DocumentService:
             stmt = select(Document).order_by(Document.uploaded_at.desc())
             return list(session.scalars(stmt).all())
 
-    def get_document(self, document_id: str) -> Document | None:
+    def get_document(self, document_id: str) -> Optional[Document]:
         with self.session_factory() as session:
             return session.get(Document, document_id)
 
@@ -42,10 +43,10 @@ class DocumentService:
         self,
         document_id: str,
         *,
-        status: str | None = None,
-        page_count: int | None = None,
-        error_msg: str | None = None,
-    ) -> Document | None:
+        status: Optional[str] = None,
+        page_count: Optional[int] = None,
+        error_msg: Optional[str] = None,
+    ) -> Optional[Document]:
         with self.session_factory() as session:
             row = session.get(Document, document_id)
             if not row:
@@ -60,7 +61,7 @@ class DocumentService:
             session.refresh(row)
             return row
 
-    def delete_document(self, document_id: str) -> Document | None:
+    def delete_document(self, document_id: str) -> Optional[Document]:
         with self.session_factory() as session:
             row = session.get(Document, document_id)
             if not row:
@@ -74,4 +75,3 @@ class DocumentService:
         file_path = Path(path)
         if file_path.exists():
             file_path.unlink()
-

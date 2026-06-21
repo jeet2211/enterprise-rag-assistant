@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -37,7 +38,7 @@ class DocumentDetail(BaseModel):
     filename: str
     page_count: int
     status: str
-    error_msg: str | None
+    error_msg: Optional[str]
     uploaded_at: datetime
     updated_at: datetime
     file_size_bytes: int
@@ -54,4 +55,3 @@ class HealthResponse(BaseModel):
     chromadb: str
     gemini: str
     uptime_seconds: float
-
