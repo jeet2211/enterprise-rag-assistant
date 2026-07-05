@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { sendChat } from '../api/client'
-import type { Message } from '../types'
+import type { Confidence, Message } from '../types'
 
 function createSessionId() {
   return crypto.randomUUID()
 }
 
-function createPendingMessage(content = 'Thinking...'): Message {
+function createPendingMessage(): Message {
   return {
     id: crypto.randomUUID(),
     role: 'assistant',
-    content,
+    content: '',
     timestamp: new Date().toISOString(),
     isPending: true,
   }
@@ -36,7 +36,7 @@ export function useChat() {
   }, [])
 
   const sendMessage = useCallback(
-    async (question: string) => {
+    async (question: string, documentIds?: string[]) => {
       const trimmed = question.trim()
       if (!trimmed || sending) return
 
@@ -57,6 +57,7 @@ export function useChat() {
           question: trimmed,
           session_id: sessionId,
           top_k: 5,
+          document_ids: documentIds && documentIds.length > 0 ? documentIds : null,
         })
 
         setMessages((current) =>
@@ -66,18 +67,27 @@ export function useChat() {
                   ...message,
                   content: response.answer,
                   citations: response.citations,
+                  confidence: response.confidence as Confidence,
+                  trace_id: response.trace_id,
+                  follow_up_questions: response.follow_up_questions,
+                  latency_ms: response.latency_ms,
                   isPending: false,
                 }
               : message
           )
         )
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to send message'
-        setError(message)
+        const errMessage = err instanceof Error ? err.message : 'Failed to send message'
+        setError(errMessage)
         setMessages((current) =>
           current.map((entry) =>
             entry.id === pendingMessage.id
-              ? { ...entry, content: `Sorry, I could not answer that. ${message}`, isPending: false }
+              ? {
+                  ...entry,
+                  content: `Sorry, I could not answer that. ${errMessage}`,
+                  confidence: 'not_found' as Confidence,
+                  isPending: false,
+                }
               : entry
           )
         )
@@ -104,4 +114,3 @@ export function useChat() {
     clearError: () => setError(null),
   }
 }
-

@@ -1,4 +1,12 @@
-import type { ChatRequest, ChatResponse, DocumentDetail, DocumentItem, UploadResponse } from '../types'
+import type {
+  ChatRequest,
+  ChatResponse,
+  DocumentDetail,
+  DocumentItem,
+  FeedbackRequest,
+  HealthStats,
+  UploadResponse,
+} from '../types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
 
@@ -7,7 +15,14 @@ type ProgressHandler = (progress: number) => void
 async function parseJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.text()
-    throw new Error(body || `Request failed with status ${response.status}`)
+    let detail = body
+    try {
+      const parsed = JSON.parse(body)
+      detail = parsed?.detail ?? parsed?.message ?? body
+    } catch {
+      // body was not JSON
+    }
+    throw new Error(detail || `Request failed with status ${response.status}`)
   }
   return response.json() as Promise<T>
 }
@@ -20,6 +35,11 @@ export async function fetchDocuments(): Promise<DocumentItem[]> {
 export async function fetchDocument(documentId: string): Promise<DocumentDetail> {
   const response = await fetch(`${API_BASE_URL}/documents/${documentId}`)
   return parseJson<DocumentDetail>(response)
+}
+
+export async function fetchDocumentStatus(documentId: string): Promise<{ id: string; status: string; error_msg?: string | null }> {
+  const response = await fetch(`${API_BASE_URL}/documents/${documentId}/status`)
+  return parseJson(response)
 }
 
 export async function deleteDocument(documentId: string): Promise<void> {
@@ -60,3 +80,16 @@ export async function sendChat(payload: ChatRequest): Promise<ChatResponse> {
   return parseJson<ChatResponse>(response)
 }
 
+export async function submitFeedback(payload: FeedbackRequest): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  await parseJson(response)
+}
+
+export async function fetchHealth(): Promise<HealthStats> {
+  const response = await fetch(`${API_BASE_URL}/health`)
+  return parseJson<HealthStats>(response)
+}

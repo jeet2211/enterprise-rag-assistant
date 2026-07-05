@@ -1,17 +1,72 @@
+import { useState } from 'react'
 import { UploadZone } from './UploadZone'
-import type { DocumentItem } from '../types'
+import type { DocumentItem, DocumentStatus } from '../types'
 
 interface SidebarProps {
   documents: DocumentItem[]
   loading: boolean
   uploading: boolean
   uploadProgress: number
+  selectedDocumentIds: string[]
   onUpload: (file: File) => Promise<void>
   onDelete: (documentId: string) => Promise<void>
-  onSelectDocument?: (document: DocumentItem) => void
-  activeDocumentId?: string | null
+  onToggleDocumentSelection: (documentId: string) => void
+  onClearSelection: () => void
   openOnMobile: boolean
   onCloseMobile: () => void
+}
+
+const STATUS_CONFIG: Record<
+  DocumentStatus,
+  { label: string; badgeClass: string; isLoading: boolean }
+> = {
+  uploaded: {
+    label: 'Uploaded',
+    badgeClass: 'bg-slate-400/15 text-slate-300',
+    isLoading: true,
+  },
+  extracting_text: {
+    label: 'Extracting',
+    badgeClass: 'bg-sky-400/15 text-sky-300',
+    isLoading: true,
+  },
+  chunking: {
+    label: 'Chunking',
+    badgeClass: 'bg-violet-400/15 text-violet-300',
+    isLoading: true,
+  },
+  embedding: {
+    label: 'Embedding',
+    badgeClass: 'bg-amber-400/15 text-amber-300',
+    isLoading: true,
+  },
+  indexing: {
+    label: 'Indexing',
+    badgeClass: 'bg-cyan-400/15 text-cyan-300',
+    isLoading: true,
+  },
+  ready: {
+    label: 'Ready',
+    badgeClass: 'bg-emerald-400/15 text-emerald-200',
+    isLoading: false,
+  },
+  failed: {
+    label: 'Failed',
+    badgeClass: 'bg-rose-400/15 text-rose-200',
+    isLoading: false,
+  },
+}
+
+function StatusBadge({ status }: { status: DocumentStatus }) {
+  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.ready
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.2em] ${config.badgeClass}`}>
+      {config.isLoading && (
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+      )}
+      {config.label}
+    </span>
+  )
 }
 
 export function Sidebar({
@@ -19,27 +74,35 @@ export function Sidebar({
   loading,
   uploading,
   uploadProgress,
+  selectedDocumentIds,
   onUpload,
   onDelete,
-  onSelectDocument,
-  activeDocumentId,
+  onToggleDocumentSelection,
+  onClearSelection,
   openOnMobile,
   onCloseMobile,
 }: SidebarProps) {
+  const [search, setSearch] = useState('')
+
+  const filtered = search.trim()
+    ? documents.filter((doc) => doc.filename.toLowerCase().includes(search.toLowerCase()))
+    : documents
+
   return (
     <aside
       className={`fixed inset-y-0 left-0 z-30 w-[88vw] max-w-sm border-r border-white/10 bg-slate-950/95 px-4 py-5 backdrop-blur-xl transition-transform duration-300 md:static md:z-auto md:w-[360px] md:translate-x-0 md:bg-transparent md:px-0 md:py-0 ${
         openOnMobile ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       }`}
     >
-      <div className="flex h-full flex-col gap-5 md:sticky md:top-0 md:h-screen md:p-5">
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-glow">
+      <div className="flex h-full flex-col gap-4 md:sticky md:top-0 md:h-screen md:p-5">
+        {/* Brand header */}
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-glow">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.3em] text-cyan-200/80">Documents</p>
-              <h2 className="mt-2 text-2xl font-semibold text-white">Enterprise RAG Assistant</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-300">
-                Upload PDFs, wait for indexing, then ask grounded questions with citations.
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-cyan-200/80">Documents</p>
+              <h2 className="mt-1.5 text-xl font-semibold text-white">Enterprise RAG</h2>
+              <p className="mt-1 text-xs leading-5 text-slate-400">
+                Upload PDFs, then ask grounded questions with citations.
               </p>
             </div>
             <button
@@ -52,86 +115,135 @@ export function Sidebar({
           </div>
         </div>
 
+        {/* Upload zone */}
         <UploadZone onUpload={onUpload} uploading={uploading} progress={uploadProgress} />
 
-        <div className="rounded-3xl border border-white/10 bg-slate-950/60 p-4 shadow-glow">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-300">Library</h3>
-            <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-slate-300">{documents.length}</span>
+        {/* Library */}
+        <div className="flex min-h-0 flex-1 flex-col rounded-3xl border border-white/10 bg-slate-950/60 p-4 shadow-glow">
+          {/* Library header */}
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-300">Library</h3>
+            <div className="flex items-center gap-2">
+              {selectedDocumentIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={onClearSelection}
+                  className="rounded-full bg-cyan-300/10 px-2 py-0.5 text-[10px] text-cyan-300 transition hover:bg-cyan-300/20"
+                >
+                  Clear ({selectedDocumentIds.length})
+                </button>
+              )}
+              <span className="rounded-full bg-white/5 px-2.5 py-1 text-xs text-slate-400">
+                {documents.length}
+              </span>
+            </div>
           </div>
 
-          <div className="max-h-[calc(100vh-360px)] space-y-3 overflow-y-auto pr-1">
+          {/* Search */}
+          {documents.length > 3 && (
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search documents…"
+              className="mb-3 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/30 focus:bg-white/10"
+            />
+          )}
+
+          {/* Document list */}
+          <div className="flex-1 space-y-2.5 overflow-y-auto pr-0.5 scrollbar-thin">
             {loading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="animate-pulse rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="space-y-2.5">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="animate-pulse rounded-2xl border border-white/10 bg-white/5 p-4">
                     <div className="h-4 w-2/3 rounded bg-white/10" />
-                    <div className="mt-3 h-3 w-1/2 rounded bg-white/10" />
+                    <div className="mt-2 h-3 w-1/2 rounded bg-white/10" />
                   </div>
                 ))}
               </div>
-            ) : documents.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm leading-6 text-slate-300">
-                No documents yet. Upload a PDF to begin.
+            ) : filtered.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-xs leading-5 text-slate-400">
+                {search ? 'No documents match your search.' : 'No documents yet. Upload a PDF to begin.'}
               </div>
             ) : (
-              documents.map((document) => {
-                const active = activeDocumentId === document.id
+              filtered.map((doc) => {
+                const selected = selectedDocumentIds.includes(doc.id)
+                const config = STATUS_CONFIG[doc.status] ?? STATUS_CONFIG.ready
                 return (
                   <div
-                    key={document.id}
+                    key={doc.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => onSelectDocument?.(document)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        onSelectDocument?.(document)
+                    onClick={() => onToggleDocumentSelection(doc.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onToggleDocumentSelection(doc.id)
                       }
                     }}
-                    className={`w-full cursor-pointer rounded-2xl border p-4 text-left transition ${
-                      active
+                    className={`w-full cursor-pointer rounded-2xl border p-3.5 text-left transition ${
+                      selected
                         ? 'border-cyan-300/40 bg-cyan-300/10'
                         : 'border-white/10 bg-white/5 hover:bg-white/10'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-medium text-white">{document.filename}</p>
-                        <p className="mt-1 text-xs text-slate-400">
-                          {document.page_count} pages · {Math.round(document.file_size_bytes / 1024)} KB
+                      {/* Checkbox indicator */}
+                      <div
+                        className={`mt-0.5 h-4 w-4 shrink-0 rounded border transition ${
+                          selected
+                            ? 'border-cyan-300 bg-cyan-300 text-slate-950'
+                            : 'border-white/20 bg-white/5'
+                        } flex items-center justify-center text-[10px] font-bold`}
+                      >
+                        {selected ? '✓' : ''}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-white" title={doc.filename}>
+                          {doc.filename}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-slate-400">
+                          {doc.page_count} pages
+                          {doc.chunk_count > 0 ? ` · ${doc.chunk_count} chunks` : ''}
+                          {' · '}
+                          {Math.round(doc.file_size_bytes / 1024)} KB
                         </p>
                       </div>
-                      <span
-                        className={`rounded-full px-2 py-1 text-[11px] uppercase tracking-[0.22em] ${
-                          document.status === 'ready'
-                            ? 'bg-emerald-400/15 text-emerald-200'
-                            : document.status === 'failed'
-                              ? 'bg-rose-400/15 text-rose-200'
-                              : 'bg-amber-400/15 text-amber-200'
-                        }`}
-                      >
-                        {document.status}
-                      </span>
+
+                      <StatusBadge status={doc.status} />
                     </div>
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <span className="text-xs text-slate-400">
-                        {new Date(document.uploaded_at).toLocaleDateString()}
+
+                    <div className="mt-2.5 flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-slate-500">
+                        {new Date(doc.uploaded_at).toLocaleDateString()}
                       </span>
                       <button
                         type="button"
-                        onClick={async (event) => {
-                          event.stopPropagation()
-                          const confirmed = window.confirm(`Delete ${document.filename}?`)
-                          if (confirmed) {
-                            await onDelete(document.id)
-                          }
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          const confirmed = window.confirm(`Delete "${doc.filename}"?`)
+                          if (confirmed) await onDelete(doc.id)
                         }}
-                        className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200 transition hover:bg-white/10"
+                        className="rounded-full border border-white/10 px-2.5 py-0.5 text-[10px] text-slate-300 transition hover:border-rose-400/30 hover:bg-rose-400/10 hover:text-rose-300"
                       >
                         Delete
                       </button>
                     </div>
+
+                    {/* Error message for failed docs */}
+                    {doc.status === 'failed' && (
+                      <p className="mt-2 text-[10px] text-rose-300/80">
+                        Processing failed. Try re-uploading.
+                      </p>
+                    )}
+
+                    {/* Processing progress indicator */}
+                    {config.isLoading && (
+                      <div className="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-white/10">
+                        <div className="h-full animate-pulse rounded-full bg-cyan-300/50" style={{ width: '60%' }} />
+      </div>
+                    )}
                   </div>
                 )
               })

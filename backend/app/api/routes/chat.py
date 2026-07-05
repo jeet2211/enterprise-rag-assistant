@@ -12,14 +12,19 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 @router.post("", response_model=ChatResponse)
 @limiter.limit(get_settings().rate_limit_chat)
 def chat(request: Request, payload: ChatRequest, chat_service=Depends(get_chat_service)):
-    answer, citations = chat_service.answer(
+    result = chat_service.answer(
         question=payload.question,
         session_id=payload.session_id,
         top_k=payload.top_k,
+        document_ids=payload.document_ids,
     )
     return ChatResponse(
-        answer=answer,
-        citations=citations,
+        answer=result["answer"],
+        citations=result["citations"],
         session_id=payload.session_id,
-        sources_used=len(citations),
+        sources_used=len(result["citations"]),
+        confidence=result["confidence"],
+        trace_id=result["trace_id"],
+        follow_up_questions=result["follow_up_questions"],
+        latency_ms=result["latency_ms"],
     )
