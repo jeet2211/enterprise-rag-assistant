@@ -10,9 +10,12 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     model_name: str = "gemini-2.5-flash"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    chunk_size: int = 1000
-    chunk_overlap: int = 150
+    chunk_size: int = 1000  # token-based chunk window
+    chunk_overlap: int = 150  # token overlap between adjacent chunks
     top_k: int = 5
+    retrieval_candidate_multiplier: int = 4
+    retrieval_mmr_lambda: float = 0.75
+    retrieval_max_chunks_per_page: int = 2
     no_answer_threshold: float = 0.55  # cosine distance above which we refuse to answer
     max_file_mb: int = 50
     session_memory_k: int = 10

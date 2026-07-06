@@ -68,6 +68,8 @@ export function useChat() {
                   content: response.answer,
                   citations: response.citations,
                   confidence: response.confidence as Confidence,
+                  evidence_status: response.evidence_status,
+                  answer_style: response.answer_style,
                   trace_id: response.trace_id,
                   follow_up_questions: response.follow_up_questions,
                   latency_ms: response.latency_ms,

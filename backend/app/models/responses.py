@@ -18,6 +18,7 @@ class Citation(BaseModel):
     token_count: int = 0
     doc_id: str = ""
     distance: float = 0.0
+    section_title: str = ""
 
 
 class ChatResponse(BaseModel):
@@ -26,6 +27,8 @@ class ChatResponse(BaseModel):
     session_id: str
     sources_used: int
     confidence: str = "medium"          # high | medium | low | not_found
+    evidence_status: str = "partial"     # exact | partial | not_found
+    answer_style: str = "supported"      # supported | refused
     trace_id: str = ""
     follow_up_questions: list[str] = []
     latency_ms: float = 0.0

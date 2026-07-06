@@ -45,3 +45,32 @@ Return only the 3 questions as a numbered list. No explanations. No extra text.
 
 def build_followup_prompt(context: str) -> str:
     return FOLLOWUP_PROMPT_TEMPLATE.format(context=context[:3000])
+
+
+VERIFIER_PROMPT_TEMPLATE = """You are verifying whether an answer is adequately supported by the provided document context.
+
+Return valid JSON only with these keys:
+- evidence_status: one of "exact", "partial", "not_found"
+- allow_answer: true or false
+- reason: short string explaining the verdict
+
+Rules:
+1. "exact" only if the context explicitly supports the answer and the key claims are directly present.
+2. "partial" if the answer is directionally supported but some details are inferred or missing.
+3. "not_found" if the context does not support the answer.
+4. If the question contains specific symbols, parameter names, or exact terms and the context does not contain them, prefer "not_found".
+5. Be strict. When in doubt, reject weak support.
+
+QUESTION:
+{question}
+
+ANSWER:
+{answer}
+
+CONTEXT:
+{context}
+"""
+
+
+def build_verifier_prompt(question: str, answer: str, context: str) -> str:
+    return VERIFIER_PROMPT_TEMPLATE.format(question=question, answer=answer, context=context[:5000])

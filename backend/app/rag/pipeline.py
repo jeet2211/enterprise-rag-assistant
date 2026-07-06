@@ -25,7 +25,7 @@ class RAGPipeline:
 
             # Stage 2: chunking
             self.document_service.update_document(document_id, status="chunking")
-            page_texts = [(page.page_number, page.text) for page in pages]
+            page_texts = [(page.page_number, page.text, page.section_title) for page in pages]
             chunks = self.chunker.chunk_pages(page_texts)
 
             # Stage 3: embedding
@@ -36,6 +36,7 @@ class RAGPipeline:
                     "page_number": chunk.page_number,
                     "chunk_index": chunk.chunk_index,
                     "token_count": chunk.token_count,
+                    "section_title": chunk.section_title,
                 }
                 for chunk in chunks
             ]

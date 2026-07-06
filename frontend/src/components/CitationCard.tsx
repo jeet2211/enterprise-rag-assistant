@@ -21,6 +21,11 @@ export function CitationCard({ citation, index }: CitationCardProps) {
           <p className="mt-1 truncate text-sm font-medium text-white">
             {citation.document_name} · page {citation.page_number}
           </p>
+          {citation.section_title ? (
+            <p className="mt-0.5 truncate text-[10px] uppercase tracking-[0.22em] text-slate-400">
+              {citation.section_title}
+            </p>
+          ) : null}
           {citation.token_count ? (
             <p className="mt-0.5 text-[10px] text-slate-500">~{citation.token_count} tokens</p>
           ) : null}

@@ -57,6 +57,11 @@ export function MessageBubble({ message, sessionId, onFollowUp, sendingDisabled 
           {!isUser && confidence && !message.isPending && (
             <ConfidenceBadge confidence={confidence} />
           )}
+          {!isUser && !message.isPending && message.evidence_status && (
+            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] tracking-[0.2em] text-slate-300">
+              {message.evidence_status}
+            </span>
+          )}
         </div>
 
         {/* Message content */}

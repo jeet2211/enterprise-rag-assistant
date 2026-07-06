@@ -24,6 +24,8 @@ export interface DocumentDetail extends DocumentItem {
 }
 
 export type Confidence = 'high' | 'medium' | 'low' | 'not_found'
+export type EvidenceStatus = 'exact' | 'partial' | 'not_found'
+export type AnswerStyle = 'supported' | 'refused'
 
 export interface Citation {
   document_name: string
@@ -32,6 +34,7 @@ export interface Citation {
   token_count?: number
   doc_id?: string
   distance?: number
+  section_title?: string
 }
 
 export interface Message {
@@ -40,6 +43,8 @@ export interface Message {
   content: string
   citations?: Citation[]
   confidence?: Confidence
+  evidence_status?: EvidenceStatus
+  answer_style?: AnswerStyle
   trace_id?: string
   follow_up_questions?: string[]
   latency_ms?: number
@@ -60,6 +65,8 @@ export interface ChatResponse {
   session_id: string
   sources_used: number
   confidence: Confidence
+  evidence_status: EvidenceStatus
+  answer_style: AnswerStyle
   trace_id: string
   follow_up_questions: string[]
   latency_ms: number

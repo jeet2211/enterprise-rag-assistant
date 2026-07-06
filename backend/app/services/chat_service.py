@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 import uuid
 from collections import defaultdict, deque
 from datetime import datetime
 
 from app.models.responses import Citation
-from app.rag.prompt import build_followup_prompt, build_prompt
+from app.rag.prompt import build_followup_prompt, build_prompt, build_verifier_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,61 @@ def _compute_confidence(distances: list[float], no_answer_threshold: float) -> s
     return "low"
 
 
+def _route_question(question: str) -> str:
+    lower = question.lower()
+    if re.search(r"\b[A-Z][A-Z0-9_]{2,}\b", question) or any(token in lower for token in ("optimal", "threshold", "tune", "tuning", "parameter", "config")):
+        return "parameter"
+    if any(token in lower for token in ("compare", "difference", "versus", "tradeoff", "why", "how", "factor", "influence", "strategy")):
+        return "explanation"
+    return "general"
+
+
+def _extract_key_terms(question: str) -> list[str]:
+    terms = re.findall(r"\b[A-Z][A-Z0-9_]{2,}\b", question)
+    # Only preserve explicitly technical tokens; generic words are too noisy
+    # for refusal gating and should not force a not_found verdict.
+    terms.extend(re.findall(r"\b[a-z]*_[a-z0-9_]+\b", question.lower()))
+    stop = {
+        "what",
+        "how",
+        "when",
+        "where",
+        "which",
+        "could",
+        "would",
+        "should",
+        "choice",
+        "factors",
+        "about",
+        "there",
+        "their",
+        "these",
+        "those",
+        "using",
+        "choose",
+        "chosen",
+        "impact",
+        "retrieval",
+        "question",
+        "answer",
+        "document",
+        "documents",
+        "system",
+        "model",
+        "does",
+        "do",
+        "did",
+    }
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for term in terms:
+        key = term.lower()
+        if key not in stop and key not in seen:
+            seen.add(key)
+            cleaned.append(term)
+    return cleaned[:8]
+
+
 # ---------------------------------------------------------------------------
 # Chat service
 # ---------------------------------------------------------------------------
@@ -77,6 +133,43 @@ class ChatService:
         )
         return self._llm
 
+    @staticmethod
+    def _format_context(matches: list[dict[str, object]]) -> str:
+        context_parts = []
+        for match in matches:
+            metadata = match["metadata"] or {}
+            document_name = str(metadata.get("document_name", "Unknown document"))
+            page_number = int(metadata.get("page_number", 0))
+            section_title = str(metadata.get("section_title", "")).strip()
+            section_prefix = f"Section: {section_title} | " if section_title else ""
+            context_parts.append(f"[{document_name} p.{page_number}] {section_prefix}{match['text']}")
+        return "\n\n".join(context_parts)
+
+    def _verify_answer(self, *, question: str, answer: str, context: str) -> dict[str, str | bool]:
+        key_terms = _extract_key_terms(question)
+        if key_terms:
+            context_lower = context.lower()
+            missing_terms = [term for term in key_terms if term.lower() not in context_lower]
+            # If the question asks about specific symbols/parameters, require
+            # those exact symbols to be present. Otherwise let the LLM judge.
+            if missing_terms and len(key_terms) <= 4:
+                return {"evidence_status": "not_found", "allow_answer": False, "reason": f"Missing key terms in context: {', '.join(missing_terms[:4])}"}
+        llm = self._load_llm()
+        if llm is None:
+            return {"evidence_status": "partial", "allow_answer": True, "reason": "Verifier unavailable; using retrieval confidence only."}
+        try:
+            response = llm.invoke(build_verifier_prompt(question, answer, context))
+            raw = response.content if hasattr(response, "content") else str(response)
+            data = json.loads(raw)
+            evidence_status = str(data.get("evidence_status", "partial"))
+            allow_answer = bool(data.get("allow_answer", evidence_status != "not_found"))
+            reason = str(data.get("reason", "")).strip()
+            if evidence_status not in {"exact", "partial", "not_found"}:
+                evidence_status = "partial"
+            return {"evidence_status": evidence_status, "allow_answer": allow_answer, "reason": reason}
+        except Exception:
+            return {"evidence_status": "partial", "allow_answer": True, "reason": "Verifier could not parse model output."}
+
     def answer(
         self,
         *,
@@ -91,11 +184,29 @@ class ChatService:
         """
         trace_id = str(uuid.uuid4())
         t_start = time.perf_counter()
+        evidence_status = "partial"
+        answer_style = "supported"
+        follow_up_questions: list[str] = []
+
+        requested_top_k = top_k or self.settings.top_k
+        route = _route_question(question)
+        if route == "parameter":
+            candidate_multiplier = max(self.settings.retrieval_candidate_multiplier, 6)
+            mmr_lambda = min(self.settings.retrieval_mmr_lambda, 0.55)
+        elif route == "explanation":
+            candidate_multiplier = self.settings.retrieval_candidate_multiplier
+            mmr_lambda = self.settings.retrieval_mmr_lambda
+        else:
+            candidate_multiplier = self.settings.retrieval_candidate_multiplier
+            mmr_lambda = self.settings.retrieval_mmr_lambda
 
         matches = self.retriever.search(
             question,
-            top_k=top_k or self.settings.top_k,
+            top_k=requested_top_k,
             document_ids=document_ids or None,
+            candidate_multiplier=candidate_multiplier,
+            mmr_lambda=mmr_lambda,
+            max_chunks_per_page=self.settings.retrieval_max_chunks_per_page,
         )
 
         distances = [float(m["distance"]) for m in matches]
@@ -103,7 +214,6 @@ class ChatService:
 
         context_parts = []
         citations: list[Citation] = []
-
         for match in matches:
             metadata = match["metadata"] or {}
             document_name = str(metadata.get("document_name", "Unknown document"))
@@ -111,7 +221,6 @@ class ChatService:
             token_count = int(metadata.get("token_count", 0))
             chunk_preview = str(metadata.get("chunk_preview", match["text"]))[:200]
             doc_id = str(metadata.get("doc_id", ""))
-            context_parts.append(f"[{document_name} p.{page_number}] {match['text']}")
             citations.append(
                 Citation(
                     document_name=document_name,
@@ -120,22 +229,26 @@ class ChatService:
                     token_count=token_count,
                     doc_id=doc_id,
                     distance=float(match["distance"]),
+                    section_title=str(metadata.get("section_title", "")),
                 )
             )
 
         # If confidence is not_found, skip LLM call entirely
         if confidence == "not_found":
             answer_text = "I could not find this information in the uploaded documents."
-            follow_up_questions: list[str] = []
+            evidence_status = "not_found"
+            answer_style = "refused"
         else:
             history = self.memory_store.render(session_id)
-            full_context = "\n\n".join(context_parts)
+            full_context = self._format_context(matches)
             prompt = build_prompt(history=history, context=full_context, question=question)
             llm = self._load_llm()
 
             if llm is None:
                 answer_text = self._fallback_answer(question, citations)
                 follow_up_questions = []
+                evidence_status = "partial"
+                answer_style = "supported"
             else:
                 try:
                     response = llm.invoke(prompt)
@@ -149,8 +262,19 @@ class ChatService:
                     answer_text = "The AI model encountered an error generating a response. Please try again."
                     follow_up_questions = []
                     confidence = "low"
+                    evidence_status = "partial"
+                    answer_style = "supported"
                 else:
                     follow_up_questions = self._generate_followups(full_context, llm)
+                    verifier = self._verify_answer(question=question, answer=answer_text, context=full_context)
+                    evidence_status = str(verifier["evidence_status"])
+                    if not bool(verifier["allow_answer"]):
+                        answer_text = "I could not find this information in the uploaded documents."
+                        follow_up_questions = []
+                        evidence_status = "not_found"
+                        answer_style = "refused"
+                    else:
+                        answer_style = "supported"
 
         latency_ms = round((time.perf_counter() - t_start) * 1000, 1)
         self.memory_store.add_turn(session_id, question, answer_text)
@@ -169,6 +293,8 @@ class ChatService:
             "answer": answer_text,
             "citations": citations,
             "confidence": confidence,
+            "evidence_status": evidence_status,
+            "answer_style": answer_style,
             "trace_id": trace_id,
             "follow_up_questions": follow_up_questions,
             "latency_ms": latency_ms,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 import fitz
 
@@ -9,6 +10,34 @@ import fitz
 class PageText:
     page_number: int
     text: str
+    section_title: str = ""
+
+
+def _detect_section_title(text: str) -> str:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return ""
+
+    heading_patterns = [
+        r"^(?:\d+(?:\.\d+){0,4})\s+(.+)$",
+        r"^(?:chapter|section)\s+\d*[:.\-]?\s*(.+)$",
+    ]
+
+    for line in lines[:8]:
+        if len(line) <= 120:
+            if line.isupper() and len(line.split()) <= 12:
+                return line.title()
+            for pattern in heading_patterns:
+                match = re.match(pattern, line, re.IGNORECASE)
+                if match:
+                    candidate = match.group(1).strip(" :-")
+                    return candidate[:120]
+
+    for line in lines[:4]:
+        if len(line.split()) <= 12 and len(line) <= 90:
+            return line[:120]
+
+    return ""
 
 
 class PDFService:
@@ -32,7 +61,7 @@ class PDFService:
                 page = doc.load_page(index)
                 text = page.get_text("text").strip()
                 total_text += len(text)
-                pages.append(PageText(page_number=index + 1, text=text))
+                pages.append(PageText(page_number=index + 1, text=text, section_title=_detect_section_title(text)))
 
             if total_text == 0:
                 raise ValueError("no_extractable_text: This PDF appears to contain only images or scanned content with no extractable text. Please use a text-based PDF.")
