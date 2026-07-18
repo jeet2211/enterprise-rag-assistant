@@ -17,16 +17,26 @@ class RAGPipeline:
         self.settings = settings
         self.chunker = Chunker(settings.chunk_size, settings.chunk_overlap)
 
+    def _ensure_document_exists(self, document_id: str) -> bool:
+        return self.document_service.get_document(document_id) is not None
+
     def process_document(self, document_id: str, file_path: str, filename: str) -> None:
         try:
+            if not self._ensure_document_exists(document_id):
+                return
+
             # Stage 1: extracting_text
             self.document_service.update_document(document_id, status="extracting_text", error_msg=None)
             pages = self.pdf_service.extract_pages(file_path)
+            if not self._ensure_document_exists(document_id):
+                return
 
             # Stage 2: chunking
             self.document_service.update_document(document_id, status="chunking")
-            page_texts = [(page.page_number, page.text) for page in pages]
+            page_texts = [(page.page_number, page.text, page.section_title) for page in pages]
             chunks = self.chunker.chunk_pages(page_texts)
+            if not self._ensure_document_exists(document_id):
+                return
 
             # Stage 3: embedding
             self.document_service.update_document(document_id, status="embedding")
@@ -36,13 +46,18 @@ class RAGPipeline:
                     "page_number": chunk.page_number,
                     "chunk_index": chunk.chunk_index,
                     "token_count": chunk.token_count,
+                    "section_title": chunk.section_title,
                 }
                 for chunk in chunks
             ]
+            if not self._ensure_document_exists(document_id):
+                return
 
             # Stage 4: indexing (embed + store in ChromaDB)
             self.document_service.update_document(document_id, status="indexing")
             self.retriever.add_chunks(document_id=document_id, filename=filename, chunks=chunk_payloads)
+            if not self._ensure_document_exists(document_id):
+                return
 
             # Done
             self.document_service.update_document(
@@ -54,7 +69,8 @@ class RAGPipeline:
             )
 
         except Exception as exc:
-            self.document_service.update_document(document_id, status="failed", error_msg=str(exc))
+            if self._ensure_document_exists(document_id):
+                self.document_service.update_document(document_id, status="failed", error_msg=str(exc))
             raise
 
     def delete_document(self, document_id: str, file_path: str) -> None:

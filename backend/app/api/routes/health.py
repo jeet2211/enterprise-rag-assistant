@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
+from redis import Redis
 
-from app.models.responses import HealthResponse
+from app.models.responses import HealthResponse, WorkerHealthResponse
+from app.tasks.celery_app import celery_app
 
 router = APIRouter()
 
@@ -37,4 +39,33 @@ def health(request: Request):
         failed_documents=stats["failed"],
         processing_documents=stats["processing"],
         total_chunks=total_chunks,
+    )
+
+
+@router.get("/health/worker", response_model=WorkerHealthResponse)
+def worker_health(request: Request):
+    settings = request.app.state.settings
+
+    redis_status = "healthy"
+    try:
+        redis_client = Redis.from_url(settings.redis_url, socket_connect_timeout=1, socket_timeout=1)
+        redis_client.ping()
+    except Exception:
+        redis_status = "degraded"
+
+    worker_count = 0
+    celery_status = "degraded"
+    try:
+        responses = celery_app.control.inspect(timeout=1).ping() or {}
+        worker_count = len(responses)
+        celery_status = "healthy" if worker_count > 0 else "degraded"
+    except Exception:
+        celery_status = "degraded"
+
+    overall = "healthy" if redis_status == "healthy" and celery_status == "healthy" else "degraded"
+    return WorkerHealthResponse(
+        status=overall,
+        redis=redis_status,
+        celery=celery_status,
+        worker_count=worker_count,
     )

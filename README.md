@@ -4,13 +4,13 @@ A full-stack RAG application for uploading PDF documents and asking grounded que
 
 ## Stack
 
-- Backend: FastAPI, SQLite, ChromaDB, PyMuPDF, Sentence Transformers, Gemini
+- Backend: FastAPI, Celery, Redis, SQLite, ChromaDB, PyMuPDF, Sentence Transformers, Gemini
 - Frontend: React, Vite, TypeScript
 - Runtime: Docker + Docker Compose
 
 ## Features
 
-- Upload PDF documents and process them in the background
+- Upload PDF documents and process them asynchronously with a Redis-backed Celery worker
 - Ask questions grounded in the uploaded documents
 - See citations with document name and page number
 - Delete documents and clear chat sessions
@@ -36,6 +36,7 @@ cp .env.example .env
 
 - `GEMINI_API_KEY`
 - Any optional tuning values you want to change, such as `CHUNK_SIZE`, `TOP_K`, or `MAX_FILE_MB`
+- Optional background processing values such as `REDIS_URL`, `CELERY_BROKER_URL`, or `CELERY_RESULT_BACKEND`
 
 ## Start the app with Docker
 
@@ -46,7 +47,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-3. Wait for both services to start, then open:
+3. Wait for the API, worker, Redis, and frontend services to start, then open:
 
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:8000`
@@ -56,6 +57,8 @@ docker compose up --build
 
 - The backend creates the SQLite database if it does not exist
 - The backend creates upload and Chroma persistence folders
+- Redis starts as the Celery broker/result backend
+- The worker consumes document-processing tasks from Redis
 - The frontend is built and served by nginx
 - The frontend talks to the backend at `http://localhost:8000/api/v1`
 
@@ -63,6 +66,7 @@ docker compose up --build
 
 - `http://localhost:5173` - UI
 - `http://localhost:8000/api/v1/health` - health check
+- `http://localhost:8000/api/v1/health/worker` - Redis/Celery worker health check
 - `http://localhost:8000/docs` - Swagger UI
 - `http://localhost:8000/redoc` - ReDoc
 
@@ -114,10 +118,25 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 - `GET /api/v1/documents/{id}` - poll processing status or inspect a document
 - `DELETE /api/v1/documents/{id}` - remove a document
 - `GET /api/v1/health` - service health check
+- `GET /api/v1/health/worker` - Redis/Celery worker health check
+
+## Background processing
+
+Uploads are queued through Celery:
+
+1. The API saves the PDF and creates a document row with status `uploaded`.
+2. The API enqueues a small task in Redis.
+3. The worker reads the task, extracts PDF text, chunks it, embeds it, indexes it in ChromaDB, and updates the
+   document status.
+
+The Docker worker starts with `--concurrency=1` to avoid SQLite and ChromaDB write contention. Increase this only
+after load testing, or move the database to Postgres first.
 
 ## Troubleshooting
 
 - If uploads fail, verify the file is a PDF and smaller than `MAX_FILE_MB`
 - If answers are empty or generic, check that `GEMINI_API_KEY` is set
 - If Docker fails to bind ports, make sure nothing else is already using `5173` or `8000`
-- If document processing is stuck on `processing`, check backend logs for PDF parsing or embedding errors
+- If document processing is stuck before `ready`, check worker logs with `docker compose logs worker`
+- If uploads return a queueing error, check Redis with `docker compose logs redis`
+- If `/api/v1/health/worker` is degraded, confirm the Redis and worker containers are running

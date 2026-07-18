@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     chroma_persist_dir: str = "./backend/chroma_db"
     upload_dir: str = "./backend/uploads"
     db_url: str = Field(default="sqlite:///./backend/app.db", alias="DATABASE_URL")
+    redis_url: str = Field(default="redis://redis:6379/0", alias="REDIS_URL")
+    celery_broker_url: str | None = Field(default=None, alias="CELERY_BROKER_URL")
+    celery_result_backend: str | None = Field(default=None, alias="CELERY_RESULT_BACKEND")
+    celery_task_always_eager: bool = Field(default=False, alias="CELERY_TASK_ALWAYS_EAGER")
     log_level: str = "INFO"
     cors_origins_raw: str = Field(default='["http://localhost:5173","http://localhost:4173"]', alias="CORS_ORIGINS")
     rate_limit_chat: str = "20/minute"
@@ -38,6 +42,14 @@ class Settings(BaseSettings):
             return value if isinstance(value, list) else [str(value)]
         except Exception:
             return [origin.strip() for origin in str(raw).split(",") if origin.strip()]
+
+    @property
+    def resolved_celery_broker_url(self) -> str:
+        return self.celery_broker_url or self.redis_url
+
+    @property
+    def resolved_celery_result_backend(self) -> str:
+        return self.celery_result_backend or self.redis_url
 
 
 @lru_cache(maxsize=1)

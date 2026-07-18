@@ -4,6 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import DateTime, Float, Integer, String, Text, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 
 class Base(DeclarativeBase):
@@ -62,7 +63,10 @@ class Feedback(Base):
 
 def build_engine(db_url: str):
     connect_args = {"check_same_thread": False} if db_url.startswith("sqlite") else {}
-    return create_engine(db_url, connect_args=connect_args)
+    kwargs = {"connect_args": connect_args}
+    if db_url in {"sqlite:///:memory:", "sqlite://"}:
+        kwargs["poolclass"] = StaticPool
+    return create_engine(db_url, **kwargs)
 
 
 def build_session_factory(engine):

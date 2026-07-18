@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+import app.main as main_module
 from app.main import app
 from app.config.settings import Settings, get_settings
 from app.models.db import Base
@@ -37,6 +38,7 @@ def fixture_test_db(test_settings):
 def fixture_client(test_settings, test_db):
     # Override settings dependency
     app.dependency_overrides[get_settings] = lambda: test_settings
+    main_module.settings = test_settings
     
     # Override app.state services with mock services if needed
     # (Here we can mock ChatService, EmbeddingService, etc. if we want)

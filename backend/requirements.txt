@@ -16,6 +16,8 @@ pydantic-settings==2.5.2
 python-dotenv==1.0.1
 sqlalchemy==2.0.35
 aiofiles==24.1.0
+celery[redis]==5.4.0
+redis==5.1.1
 slowapi==0.1.9
 rank-bm25==0.2.2
 protobuf==4.25.9

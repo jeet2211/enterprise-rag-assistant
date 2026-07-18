@@ -84,3 +84,10 @@ class HealthResponse(BaseModel):
     failed_documents: int = 0
     processing_documents: int = 0
     total_chunks: int = 0
+
+
+class WorkerHealthResponse(BaseModel):
+    status: str
+    redis: str
+    celery: str
+    worker_count: int = 0

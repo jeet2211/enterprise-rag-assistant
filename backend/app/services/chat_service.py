@@ -56,7 +56,28 @@ def _route_question(question: str) -> str:
     lower = question.lower()
     if re.search(r"\b[A-Z][A-Z0-9_]{2,}\b", question) or any(token in lower for token in ("optimal", "threshold", "tune", "tuning", "parameter", "config")):
         return "parameter"
-    if any(token in lower for token in ("compare", "difference", "versus", "tradeoff", "why", "how", "factor", "influence", "strategy")):
+    if any(
+        token in lower
+        for token in (
+            "architecture",
+            "best",
+            "build",
+            "compare",
+            "create",
+            "design",
+            "difference",
+            "factor",
+            "how",
+            "implement",
+            "influence",
+            "pattern",
+            "plan",
+            "strategy",
+            "tradeoff",
+            "versus",
+            "why",
+        )
+    ):
         return "explanation"
     return "general"
 
@@ -194,8 +215,9 @@ class ChatService:
             candidate_multiplier = max(self.settings.retrieval_candidate_multiplier, 6)
             mmr_lambda = min(self.settings.retrieval_mmr_lambda, 0.55)
         elif route == "explanation":
-            candidate_multiplier = self.settings.retrieval_candidate_multiplier
-            mmr_lambda = self.settings.retrieval_mmr_lambda
+            requested_top_k = max(requested_top_k, min(self.settings.top_k + 2, 8))
+            candidate_multiplier = max(self.settings.retrieval_candidate_multiplier, 5)
+            mmr_lambda = min(self.settings.retrieval_mmr_lambda, 0.65)
         else:
             candidate_multiplier = self.settings.retrieval_candidate_multiplier
             mmr_lambda = self.settings.retrieval_mmr_lambda

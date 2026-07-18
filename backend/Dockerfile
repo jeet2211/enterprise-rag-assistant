@@ -7,9 +7,10 @@ ENV PYTHONUNBUFFERED=1
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 ENV PIP_DEFAULT_TIMEOUT=120
 ENV PIP_RETRIES=10
+ENV ANONYMIZED_TELEMETRY=False
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential curl \
+    && apt-get install -y --no-install-recommends build-essential curl gosu \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -22,10 +23,11 @@ COPY . .
 RUN groupadd -g 10001 appgroup && \
     useradd -u 10001 -g appgroup -d /app/backend -s /bin/bash appuser && \
     mkdir -p /app/backend/uploads /app/backend/chroma_db /app/backend/data && \
-    chown -R appuser:appgroup /app/backend
+    chown -R appuser:appgroup /app/backend && \
+    chmod +x /app/backend/docker-entrypoint.sh
 
 EXPOSE 8000
 
-USER appuser
+ENTRYPOINT ["/app/backend/docker-entrypoint.sh"]
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

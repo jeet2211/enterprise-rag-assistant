@@ -28,6 +28,7 @@ def test_feedback_endpoint(client):
         "reason": "Very accurate answer, thank you!"
     }
     response = client.post("/api/v1/feedback", json=feedback_payload)
-    assert response.status_code == 200
+    assert response.status_code == 201
     data = response.json()
-    assert data["status"] == "success"
+    assert "feedback_id" in data
+    assert data["message"] == "Feedback recorded. Thank you!"

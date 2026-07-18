@@ -5,9 +5,10 @@ import uuid
 from pathlib import Path
 
 import aiofiles
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status
 
 from app.models.responses import UploadResponse
+from app.tasks.document_tasks import process_document_task
 from app.utils.validators import validate_pdf_upload
 
 router = APIRouter(prefix="/upload", tags=["upload"])
@@ -39,14 +40,9 @@ async def _save_upload(file: UploadFile, destination: Path) -> int:
     return total
 
 
-def _background_process(document_id: str, file_path: str, filename: str, request_state):
-    request_state.pipeline.process_document(document_id, file_path, filename)
-
-
 @router.post("", response_model=UploadResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_document(
     request: Request,
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
 ):
     settings = request.app.state.settings
@@ -55,14 +51,14 @@ async def upload_document(
     # ── Deduplication: compute SHA-256 hash and check for existing document ──
     file_hash = await _compute_hash(file)
     existing = request.app.state.document_service.get_by_hash(file_hash)
-    if existing is not None and existing.status == "ready":
+    if existing is not None and existing.status != "failed":
         return UploadResponse(
             document_id=existing.id,
             filename=existing.filename,
             status=existing.status,
             message=(
-                f"This file has already been processed as '{existing.filename}'. "
-                "No duplicate processing needed."
+                f"This file already exists as '{existing.filename}' with status '{existing.status}'. "
+                "No duplicate processing was queued."
             ),
             deduplicated=True,
         )
@@ -83,9 +79,19 @@ async def upload_document(
         file_size=size,
         file_hash=file_hash,
     )
-    background_tasks.add_task(
-        _background_process, document_id, str(destination), original_name, request.app.state
-    )
+    try:
+        process_document_task.delay(document_id, str(destination), original_name)
+    except Exception as exc:
+        request.app.state.document_service.update_document(
+            document_id,
+            status="failed",
+            error_msg=f"Could not enqueue document processing task: {exc}",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document was saved, but processing could not be queued. Please try again.",
+        ) from exc
+
     return UploadResponse(
         document_id=document_id,
         filename=original_name,

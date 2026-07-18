@@ -33,4 +33,7 @@ testpaths = [
     "tests",
 ]
 python_files = ["test_*.py"]
+pythonpath = [
+    ".",
+]
 asyncio_mode = "auto"
