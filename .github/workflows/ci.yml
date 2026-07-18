@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest httpx ruff mypy
+
+      - name: Run Ruff Lint/Format Checks
+        run: |
+          cd backend
+          ruff check .
+          ruff format --check .
+
+      - name: Run Mypy Type Checks
+        run: |
+          cd backend
+          mypy app --ignore-missing-imports
+
+      - name: Run Tests
+        run: |
+          cd backend
+          pytest

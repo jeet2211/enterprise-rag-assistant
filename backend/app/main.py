@@ -4,7 +4,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -93,6 +94,28 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Enterprise RAG Assistant", version="2.0.0", lifespan=lifespan)
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import logging
+    import uuid
+    trace_id = str(uuid.uuid4())
+    logger = logging.getLogger("app.main")
+    logger.error(
+        '{"event":"unhandled_error","trace_id":"%s","path":"%s","error":"%s"}',
+        trace_id,
+        request.url.path,
+        str(exc),
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error. Please contact support.",
+            "trace_id": trace_id,
+        },
+    )
+
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

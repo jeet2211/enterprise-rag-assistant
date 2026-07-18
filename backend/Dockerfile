@@ -18,8 +18,14 @@ RUN python -m pip install --upgrade pip \
 
 COPY . .
 
-RUN mkdir -p /app/backend/uploads /app/backend/chroma_db /app/backend/data
+# Create a non-root user and group, create directories, and set permissions
+RUN groupadd -g 10001 appgroup && \
+    useradd -u 10001 -g appgroup -d /app/backend -s /bin/bash appuser && \
+    mkdir -p /app/backend/uploads /app/backend/chroma_db /app/backend/data && \
+    chown -R appuser:appgroup /app/backend
 
 EXPOSE 8000
+
+USER appuser
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

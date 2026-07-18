@@ -1,29 +1,78 @@
+version: "3.8"
+
 services:
   backend:
     build:
       context: ./backend
+      dockerfile: Dockerfile
+    image: enterprise-rag-backend:latest
+    container_name: rag-backend
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Run container using the non-root appuser UID/GID explicitly to ensure host volume permissions map correctly
+    user: "10001:10001"
     env_file:
       - .env
     environment:
       UPLOAD_DIR: /app/backend/uploads
       CHROMA_PERSIST_DIR: /app/backend/chroma_db
       DATABASE_URL: sqlite:////app/backend/data/app.db
+      LOG_LEVEL: INFO
     ports:
       - "8000:8000"
     volumes:
       - backend_uploads:/app/backend/uploads
       - backend_chroma:/app/backend/chroma_db
       - backend_sqlite:/app/backend/data
-    restart: unless-stopped
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   frontend:
     build:
       context: ./frontend
-    depends_on:
-      - backend
+      dockerfile: Dockerfile
+    image: enterprise-rag-frontend:latest
+    container_name: rag-frontend
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "5173:80"
-    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - rag-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  rag-network:
+    driver: bridge
 
 volumes:
   backend_uploads:
