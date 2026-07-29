@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from typing import cast
 
 import chromadb
+from chromadb.api.types import Include
 
 
 class Retriever:
@@ -171,11 +172,12 @@ class Retriever:
 
         try:
             query_embedding = self.embedding_service.embed_query(query)
+            include: Include = ["documents", "metadatas", "distances", "embeddings"]
             result = self.collection.query(
                 query_embeddings=[query_embedding],
                 n_results=candidate_top_k,
                 where=where,
-                include=["documents", "metadatas", "distances", "embeddings"],
+                include=include,
             )
         except Exception:
             # Collection may be empty or filter matched nothing — return empty
