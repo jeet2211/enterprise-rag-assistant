@@ -8,6 +8,7 @@ from app.rag.chunker import Chunker
 # 7-stage document processing status values:
 # uploaded → extracting_text → chunking → embedding → indexing → ready / failed
 
+
 class RAGPipeline:
     def __init__(self, pdf_service, embedding_service, retriever, document_service, settings):
         self.pdf_service = pdf_service

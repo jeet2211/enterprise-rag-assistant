@@ -26,9 +26,9 @@ class ChatResponse(BaseModel):
     citations: list[Citation]
     session_id: str
     sources_used: int
-    confidence: str = "medium"          # high | medium | low | not_found
-    evidence_status: str = "partial"     # exact | partial | not_found
-    answer_style: str = "supported"      # supported | refused
+    confidence: str = "medium"  # high | medium | low | not_found
+    evidence_status: str = "partial"  # exact | partial | not_found
+    answer_style: str = "supported"  # supported | refused
     trace_id: str = ""
     follow_up_questions: list[str] = []
     latency_ms: float = 0.0

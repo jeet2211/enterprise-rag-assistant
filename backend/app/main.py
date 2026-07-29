@@ -54,10 +54,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Enterprise RAG Assistant", version="2.0.0", lifespan=lifespan)
 Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
 
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     import logging
     import uuid
+
     trace_id = str(uuid.uuid4())
     logger = logging.getLogger("app.main")
     logger.error(
@@ -74,6 +76,7 @@ async def global_exception_handler(request: Request, exc: Exception):
             "trace_id": trace_id,
         },
     )
+
 
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)

@@ -27,7 +27,8 @@ def list_documents(request: Request, current_user: User = Depends(get_current_us
             uploaded_at=doc.uploaded_at,
             file_size_bytes=doc.file_size or 0,
         )
-        for doc in docs if current_user.role == "admin" or doc.user_id == current_user.id
+        for doc in docs
+        if current_user.role == "admin" or doc.user_id == current_user.id
     ]
 
 

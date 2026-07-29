@@ -46,12 +46,16 @@ class PDFService:
         try:
             doc = fitz.open(file_path)
         except fitz.FileDataError as exc:
-            raise ValueError(f"invalid_pdf: Could not open PDF file. It may be corrupted or not a valid PDF. Detail: {exc}") from exc
+            raise ValueError(
+                f"invalid_pdf: Could not open PDF file. It may be corrupted or not a valid PDF. Detail: {exc}"
+            ) from exc
 
         with doc:
             # Detect password-protected PDFs
             if doc.needs_pass:
-                raise ValueError("password_protected_pdf: This PDF is password-protected. Please provide an unlocked PDF.")
+                raise ValueError(
+                    "password_protected_pdf: This PDF is password-protected. Please provide an unlocked PDF."
+                )
 
             if doc.page_count == 0:
                 raise ValueError("empty_pdf: The uploaded PDF has no pages.")
@@ -64,6 +68,8 @@ class PDFService:
                 pages.append(PageText(page_number=index + 1, text=text, section_title=_detect_section_title(text)))
 
             if total_text == 0:
-                raise ValueError("no_extractable_text: This PDF appears to contain only images or scanned content with no extractable text. Please use a text-based PDF.")
+                raise ValueError(
+                    "no_extractable_text: This PDF appears to contain only images or scanned content with no extractable text. Please use a text-based PDF."
+                )
 
         return pages

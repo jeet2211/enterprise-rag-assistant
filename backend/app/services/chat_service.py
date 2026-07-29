@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 # In-memory session memory (sliding window for LLM context)
 # ---------------------------------------------------------------------------
 
+
 class SessionMemoryStore:
     def __init__(self, window_size: int = 10):
         self.window_size = window_size
@@ -38,6 +39,7 @@ class SessionMemoryStore:
 # ---------------------------------------------------------------------------
 # Confidence scoring
 # ---------------------------------------------------------------------------
+
 
 def _compute_confidence(distances: list[float], no_answer_threshold: float) -> str:
     if not distances:
@@ -138,6 +140,7 @@ def _extract_key_terms(question: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # Chat service
 # ---------------------------------------------------------------------------
+
 
 class ChatService:
     def __init__(self, retriever, settings, memory_store: SessionMemoryStore, session_factory=None):
@@ -360,9 +363,12 @@ class ChatService:
         self.memory_store.add_turn(session_id, question, answer_text)
 
         logger.info(
-            '{"event":"chat_request","trace_id":"%s","session_id":"%s","confidence":"%s",'
-            '"sources":%d,"latency_ms":%s}',
-            trace_id, session_id, confidence, len(citations), latency_ms,
+            '{"event":"chat_request","trace_id":"%s","session_id":"%s","confidence":"%s","sources":%d,"latency_ms":%s}',
+            trace_id,
+            session_id,
+            confidence,
+            len(citations),
+            latency_ms,
         )
 
         # Persist to DB if session_factory is available
@@ -494,9 +500,12 @@ class ChatService:
             self._record_timing(timings, "persist_ms", t_stage)
 
         logger.info(
-            '{"event":"chat_request","trace_id":"%s","session_id":"%s","confidence":"%s",'
-            '"sources":%d,"latency_ms":%s}',
-            trace_id, session_id, confidence, len(citations), latency_ms,
+            '{"event":"chat_request","trace_id":"%s","session_id":"%s","confidence":"%s","sources":%d,"latency_ms":%s}',
+            trace_id,
+            session_id,
+            confidence,
+            len(citations),
+            latency_ms,
         )
         logger.info(
             '{"event":"chat_timing","trace_id":"%s","timings":%s}',

@@ -4,8 +4,10 @@ from collections import defaultdict
 import re
 from datetime import datetime, timezone
 from collections.abc import Sequence
+from typing import Any, cast
 
 import chromadb
+from chromadb.api.types import Include
 
 
 class Retriever:
@@ -98,7 +100,10 @@ class Retriever:
                         if candidate_embs[selected_index] is not None
                     ]
                     if selected_embeddings:
-                        redundancy = max(self._dot(candidate_embedding, selected_embedding) for selected_embedding in selected_embeddings)  # type: ignore[arg-type]
+                        redundancy = max(
+                            self._dot(candidate_embedding, selected_embedding)
+                            for selected_embedding in selected_embeddings
+                        )  # type: ignore[arg-type]
 
                 score = lambda_mult * query_sims[index] - (1.0 - lambda_mult) * redundancy
                 if best_score is None or score > best_score:
@@ -167,20 +172,21 @@ class Retriever:
 
         try:
             query_embedding = self.embedding_service.embed_query(query)
+            include: Any = ["documents", "metadatas", "distances", "embeddings"]
             result = self.collection.query(
                 query_embeddings=[query_embedding],
                 n_results=candidate_top_k,
                 where=where,
-                include=["documents", "metadatas", "distances", "embeddings"],
+                include=include,
             )
         except Exception:
             # Collection may be empty or filter matched nothing — return empty
             return []
 
-        documents = result.get("documents", [[]])[0]
-        metadatas = result.get("metadatas", [[]])[0]
-        distances = result.get("distances", [[]])[0]
-        embeddings = result.get("embeddings", [[]])[0]
+        documents = cast(list[list[str]], result.get("documents") or [[]])[0]
+        metadatas = cast(list[list[dict[str, object]]], result.get("metadatas") or [[]])[0]
+        distances = cast(list[list[float]], result.get("distances") or [[]])[0]
+        embeddings = cast(list[list[Sequence[float]]], result.get("embeddings") or [[]])[0]
         matches: list[dict[str, object]] = []
         for text, metadata, distance, embedding in zip(documents, metadatas, distances, embeddings):
             matches.append(
