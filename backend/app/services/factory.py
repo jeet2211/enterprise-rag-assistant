@@ -71,9 +71,7 @@ def build_app_services(settings: Settings, *, include_chat: bool = True) -> AppS
     pdf_service = PDFService()
     memory_store = SessionMemoryStore(settings.session_memory_k)
     chat_service = (
-        ChatService(retriever, settings, memory_store, session_factory=session_factory)
-        if include_chat
-        else None
+        ChatService(retriever, settings, memory_store, session_factory=session_factory) if include_chat else None
     )
     pipeline = RAGPipeline(pdf_service, embedding_service, retriever, document_service, settings)
 

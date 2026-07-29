@@ -98,7 +98,10 @@ class Retriever:
                         if candidate_embs[selected_index] is not None
                     ]
                     if selected_embeddings:
-                        redundancy = max(self._dot(candidate_embedding, selected_embedding) for selected_embedding in selected_embeddings)  # type: ignore[arg-type]
+                        redundancy = max(
+                            self._dot(candidate_embedding, selected_embedding)
+                            for selected_embedding in selected_embeddings
+                        )  # type: ignore[arg-type]
 
                 score = lambda_mult * query_sims[index] - (1.0 - lambda_mult) * redundancy
                 if best_score is None or score > best_score:

@@ -31,4 +31,3 @@ class EmbeddingService:
     @property
     def ready(self) -> bool:
         return self._model is not None
-

@@ -16,7 +16,12 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 @router.post("", response_model=ChatResponse)
 @limiter.limit(get_settings().rate_limit_chat)
-def chat(request: Request, payload: ChatRequest, chat_service=Depends(get_chat_service), current_user: User = Depends(get_current_user)):
+def chat(
+    request: Request,
+    payload: ChatRequest,
+    chat_service=Depends(get_chat_service),
+    current_user: User = Depends(get_current_user),
+):
     result = chat_service.answer(
         question=payload.question,
         session_id=payload.session_id,
@@ -44,7 +49,12 @@ def _sse(event: str, data: dict) -> str:
 
 @router.post("/stream")
 @limiter.limit(get_settings().rate_limit_chat)
-def chat_stream(request: Request, payload: ChatRequest, chat_service=Depends(get_chat_service), current_user: User = Depends(get_current_user)):
+def chat_stream(
+    request: Request,
+    payload: ChatRequest,
+    chat_service=Depends(get_chat_service),
+    current_user: User = Depends(get_current_user),
+):
     def events():
         try:
             for item in chat_service.answer_stream(

@@ -7,9 +7,11 @@ from app.models.user import User
 
 security = HTTPBearer(auto_error=False)
 
+
 def _get_session(request: Request):
     with request.app.state.session_factory() as session:
         yield session
+
 
 def get_current_user(
     request: Request,
@@ -33,6 +35,7 @@ def get_current_user(
             detail="User not found or inactive",
         )
     return user
+
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     """Require the authenticated user to have the admin role."""

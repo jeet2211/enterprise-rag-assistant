@@ -60,7 +60,7 @@ class Feedback(Base):
     user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     message_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     session_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    rating: Mapped[str] = mapped_column(String(8), nullable=False)   # 'good' | 'bad'
+    rating: Mapped[str] = mapped_column(String(8), nullable=False)  # 'good' | 'bad'
     reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

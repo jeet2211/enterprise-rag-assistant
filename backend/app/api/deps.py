@@ -17,4 +17,3 @@ def get_pipeline(request: Request):
 
 def get_chat_service(request: Request):
     return request.app.state.chat_service
-
