@@ -53,6 +53,8 @@ jobs:
     needs: build-and-push
     environment: production
     steps:
+      - uses: actions/checkout@v4
+
       - name: Sync compose files to server
         uses: appleboy/scp-action@v0.1.7
         with:
