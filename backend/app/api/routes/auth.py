@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Body, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr, field_validator
 from app.auth.deps import _get_session, get_current_user
@@ -91,9 +91,9 @@ def _issue_tokens(user: User, settings, response: Response) -> TokenResponse:
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(get_settings().rate_limit_signup)
 def signup(
-    payload: SignupRequest,
     request: Request,
     response: Response,
+    payload: SignupRequest = Body(...),
     session: Session = Depends(_get_session),
 ):
     """Create a new user account and return tokens."""
@@ -117,9 +117,9 @@ def signup(
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit(get_settings().rate_limit_login)
 def login(
-    payload: LoginRequest,
     request: Request,
     response: Response,
+    payload: LoginRequest = Body(...),
     session: Session = Depends(_get_session),
 ):
     """Authenticate user credentials and return tokens."""
@@ -159,8 +159,8 @@ def refresh_token(
 
 @router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
 def password_reset_request(
-    payload: PasswordResetRequest,
     request: Request,
+    payload: PasswordResetRequest = Body(...),
     session: Session = Depends(_get_session),
 ):
     """Stub: log password reset token. Wire real SMTP in production."""
@@ -177,8 +177,8 @@ def password_reset_request(
 
 @router.post("/password-reset/confirm")
 def password_reset_confirm(
-    payload: PasswordResetConfirm,
     request: Request,
+    payload: PasswordResetConfirm = Body(...),
     session: Session = Depends(_get_session),
 ):
     """Consume a reset token and set a new password."""

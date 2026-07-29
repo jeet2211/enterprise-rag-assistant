@@ -21,7 +21,21 @@ export interface LoginPayload {
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? 'Request failed');
+    const detail = err?.detail;
+    const message = Array.isArray(detail)
+      ? detail
+          .map((item) => {
+            if (typeof item === 'string') return item;
+            if (item && typeof item === 'object') {
+              return item.msg ?? item.message ?? JSON.stringify(item);
+            }
+            return String(item);
+          })
+          .join(', ')
+      : typeof detail === 'string'
+        ? detail
+        : err?.message ?? 'Request failed';
+    throw new Error(message);
   }
   return res.json();
 }
