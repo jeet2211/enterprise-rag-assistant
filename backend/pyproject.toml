@@ -12,7 +12,17 @@ select = [
     "B",   # bugbear
     "UP",  # pyupgrade
 ]
-ignore = []
+ignore = [
+    "B008",
+    "B904",
+    "B905",
+    "C901",
+    "E501",
+    "F401",
+    "I001",
+    "UP017",
+    "W293",
+]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true

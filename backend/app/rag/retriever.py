@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timezone
 import re
-from typing import Sequence
+from datetime import datetime, timezone
+from collections.abc import Sequence
 
 import chromadb
 
