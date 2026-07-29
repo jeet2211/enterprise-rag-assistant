@@ -53,6 +53,15 @@ jobs:
     needs: build-and-push
     environment: production
     steps:
+      - name: Sync compose files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-compose.yml,docker-compose.prod.yml"
+          target: /opt/rag-assistant/
+
       - name: SSH Deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
