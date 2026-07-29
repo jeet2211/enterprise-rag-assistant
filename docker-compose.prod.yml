@@ -1,0 +1,88 @@
+# Production overrides — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  postgres:
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+  redis:
+    restart: always
+    # Remove direct port exposure in production
+    ports: !reset []
+
+  backend:
+    restart: always
+    # Remove direct port exposure — only accessible via reverse proxy
+    ports: !reset []
+    networks:
+      - rag-network
+      - deploy_internal
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql://raguser:${POSTGRES_PASSWORD}@postgres:5432/ragdb
+      CORS_ORIGINS: '["https://${DOMAIN}"]'
+      PUBLIC_APP_URL: https://${DOMAIN}
+      API_BASE_URL: https://${DOMAIN}/api/v1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    restart: always
+    networks:
+      - rag-network
+      - deploy_internal
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql://raguser:${POSTGRES_PASSWORD}@postgres:5432/ragdb
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    restart: always
+    # Remove direct port exposure
+    ports: !reset []
+    networks:
+      - rag-network
+      - deploy_internal
+
+  reverse-proxy:
+    profiles:
+      - standalone-proxy
+    image: caddy:2-alpine
+    container_name: rag-caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - rag-network
+    depends_on:
+      - backend
+      - frontend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  deploy_internal:
+    external: true

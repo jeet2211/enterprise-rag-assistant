@@ -20,10 +20,12 @@ class DocumentService:
         file_path: str,
         file_size: int,
         file_hash: str | None = None,
+        user_id: str | None = None,
     ) -> Document:
         with self.session_factory() as session:
             row = Document(
                 id=document_id,
+                user_id=user_id,
                 filename=filename,
                 file_path=file_path,
                 file_size=file_size,

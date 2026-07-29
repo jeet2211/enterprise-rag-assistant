@@ -280,6 +280,7 @@ class ChatService:
         session_id: str,
         top_k: int | None = None,
         document_ids: list[str] | None = None,
+        user_id: str | None = None,
     ) -> dict:
         """
         Returns a dict with keys:
@@ -376,6 +377,7 @@ class ChatService:
                 trace_id,
                 latency_ms,
                 document_ids,
+                user_id,
             )
             self._record_timing(timings, "persist_ms", t_stage)
 
@@ -403,6 +405,7 @@ class ChatService:
         session_id: str,
         top_k: int | None = None,
         document_ids: list[str] | None = None,
+        user_id: str | None = None,
     ):
         trace_id = str(uuid.uuid4())
         t_start = time.perf_counter()
@@ -486,6 +489,7 @@ class ChatService:
                 trace_id,
                 latency_ms,
                 document_ids,
+                user_id,
             )
             self._record_timing(timings, "persist_ms", t_stage)
 
@@ -556,6 +560,7 @@ class ChatService:
         trace_id: str,
         latency_ms: float,
         document_ids: list[str] | None,
+        user_id: str | None = None,
     ) -> None:
         """Persist user question and assistant answer to the database."""
         try:
@@ -579,6 +584,7 @@ class ChatService:
                     session.add(
                         ChatSession(
                             id=session_id,
+                            user_id=user_id,
                             document_ids=json.dumps(document_ids or []),
                             created_at=datetime.utcnow(),
                             updated_at=datetime.utcnow(),
@@ -591,6 +597,7 @@ class ChatService:
                 session.add(
                     ChatMessage(
                         id=str(uuid.uuid4()),
+                        user_id=user_id,
                         session_id=session_id,
                         role="user",
                         content=question,
@@ -601,6 +608,7 @@ class ChatService:
                 session.add(
                     ChatMessage(
                         id=str(uuid.uuid4()),
+                        user_id=user_id,
                         session_id=session_id,
                         role="assistant",
                         content=answer,

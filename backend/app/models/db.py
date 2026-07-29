@@ -15,6 +15,7 @@ class Document(Base):
     __tablename__ = "documents"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str] = mapped_column(Text, nullable=False)
     file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
@@ -31,6 +32,7 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     document_ids: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON list of doc IDs
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -40,6 +42,7 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     session_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(16), nullable=False)  # 'user' | 'assistant'
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -54,6 +57,7 @@ class Feedback(Base):
     __tablename__ = "feedback"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     message_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     session_id: Mapped[str] = mapped_column(String(36), nullable=False)
     rating: Mapped[str] = mapped_column(String(8), nullable=False)   # 'good' | 'bad'

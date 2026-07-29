@@ -35,6 +35,19 @@ class Settings(BaseSettings):
     cors_origins_raw: str = Field(default='["http://localhost:5173","http://localhost:4173"]', alias="CORS_ORIGINS")
     rate_limit_chat: str = "20/minute"
 
+    # Auth
+    secret_key: str = Field(default="change-me-in-production-use-openssl-rand-hex-32", alias="SECRET_KEY")
+    access_token_expire_minutes: int = Field(default=15, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
+    refresh_token_expire_days: int = Field(default=7, alias="REFRESH_TOKEN_EXPIRE_DAYS")
+
+    # Public URLs
+    public_app_url: str = Field(default="http://localhost:5173", alias="PUBLIC_APP_URL")
+    api_base_url: str = Field(default="http://localhost:8000/api/v1", alias="API_BASE_URL")
+
+    # Rate limits
+    rate_limit_login: str = Field(default="5/minute", alias="RATE_LIMIT_LOGIN")
+    rate_limit_signup: str = Field(default="3/minute", alias="RATE_LIMIT_SIGNUP")
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", protected_namespaces=(), populate_by_name=True)
 
     @property

@@ -38,3 +38,24 @@
     border-radius: 999px;
   }
 }
+
+@layer components {
+  .auth-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid rgba(255,255,255,0.1);
+    border-top-color: #6366f1;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .auth-page {
+    /* Base styles handled by tailwind classes */
+  }
+
+  .auth-card {
+    /* Additional refined styles on top of tailwind classes */
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.1);
+  }
+}

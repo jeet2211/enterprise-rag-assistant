@@ -5,11 +5,13 @@ import uuid
 from pathlib import Path
 
 import aiofiles
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status, Depends
 
 from app.models.responses import UploadResponse
 from app.tasks.document_tasks import process_document_task
 from app.utils.validators import validate_pdf_upload
+from app.auth.deps import get_current_user
+from app.models.user import User
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
@@ -44,6 +46,7 @@ async def _save_upload(file: UploadFile, destination: Path) -> int:
 async def upload_document(
     request: Request,
     file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
 ):
     settings = request.app.state.settings
     await validate_pdf_upload(file, settings.max_file_mb * 1024 * 1024)
@@ -78,6 +81,7 @@ async def upload_document(
         file_path=str(destination),
         file_size=size,
         file_hash=file_hash,
+        user_id=current_user.id,
     )
     try:
         process_document_task.delay(document_id, str(destination), original_name)

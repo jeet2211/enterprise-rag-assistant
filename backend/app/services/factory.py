@@ -13,6 +13,7 @@ from app.services.chat_service import ChatService, SessionMemoryStore
 from app.services.document_service import DocumentService
 from app.services.embedding_service import EmbeddingService
 from app.services.pdf_service import PDFService
+from app.models.user import User  # noqa: F401
 
 
 @dataclass(slots=True)
@@ -59,8 +60,9 @@ def build_app_services(settings: Settings, *, include_chat: bool = True) -> AppS
     Path(settings.chroma_persist_dir).mkdir(parents=True, exist_ok=True)
 
     engine = build_engine(settings.db_url)
-    Base.metadata.create_all(bind=engine)
-    migrate_sqlite_schema(engine)
+    if settings.app_env != "production":
+        Base.metadata.create_all(bind=engine)
+        migrate_sqlite_schema(engine)
     session_factory = build_session_factory(engine)
 
     embedding_service = EmbeddingService(settings.embedding_model)

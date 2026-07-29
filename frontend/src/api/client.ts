@@ -10,6 +10,34 @@ import type {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
 
+import { refreshToken } from './auth';
+
+let accessToken: string | null = null;
+export function setAccessToken(token: string | null): void { accessToken = token; }
+
+async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const options = init || {};
+  const headers = new Headers(options.headers);
+  if (accessToken) {
+    headers.set('Authorization', `Bearer ${accessToken}`);
+  }
+  options.headers = headers;
+
+  let response = await fetch(input, options);
+  
+  if (response.status === 401) {
+    const tokens = await refreshToken();
+    if (tokens) {
+      setAccessToken(tokens.access_token);
+      headers.set('Authorization', `Bearer ${tokens.access_token}`);
+      response = await fetch(input, options);
+    } else {
+      window.dispatchEvent(new Event('auth:logout'));
+    }
+  }
+  return response;
+}
+
 type ProgressHandler = (progress: number) => void
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -28,24 +56,24 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchDocuments(): Promise<DocumentItem[]> {
-  const response = await fetch(`${API_BASE_URL}/documents`)
+  const response = await authFetch(`${API_BASE_URL}/documents`)
   return parseJson<DocumentItem[]>(response)
 }
 
 export async function fetchDocument(documentId: string): Promise<DocumentDetail> {
-  const response = await fetch(`${API_BASE_URL}/documents/${documentId}`)
+  const response = await authFetch(`${API_BASE_URL}/documents/${documentId}`)
   return parseJson<DocumentDetail>(response)
 }
 
 type DocumentStatusResponse = { id: string; status: string; error_msg?: string | null }
 
 export async function fetchDocumentStatus(documentId: string): Promise<DocumentStatusResponse> {
-  const response = await fetch(`${API_BASE_URL}/documents/${documentId}/status`)
+  const response = await authFetch(`${API_BASE_URL}/documents/${documentId}/status`)
   return parseJson(response)
 }
 
 export async function deleteDocument(documentId: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/documents/${documentId}`, { method: 'DELETE' })
+  const response = await authFetch(`${API_BASE_URL}/documents/${documentId}`, { method: 'DELETE' })
   await parseJson(response)
 }
 
@@ -53,6 +81,9 @@ export function uploadDocument(file: File, onProgress?: ProgressHandler): Promis
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', `${API_BASE_URL}/upload`)
+    if (accessToken) {
+      xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`)
+    }
     xhr.responseType = 'json'
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && onProgress) {
@@ -74,7 +105,7 @@ export function uploadDocument(file: File, onProgress?: ProgressHandler): Promis
 }
 
 export async function sendChat(payload: ChatRequest): Promise<ChatResponse> {
-  const response = await fetch(`${API_BASE_URL}/chat`, {
+  const response = await authFetch(`${API_BASE_URL}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -103,7 +134,7 @@ function parseSseBlock(block: string): { event: string; data: unknown } | null {
 }
 
 export async function sendChatStream(payload: ChatRequest, handlers: ChatStreamHandlers): Promise<ChatResponse> {
-  const response = await fetch(`${API_BASE_URL}/chat/stream`, {
+  const response = await authFetch(`${API_BASE_URL}/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     body: JSON.stringify(payload),
@@ -150,7 +181,7 @@ export async function sendChatStream(payload: ChatRequest, handlers: ChatStreamH
 }
 
 export async function submitFeedback(payload: FeedbackRequest): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/feedback`, {
+  const response = await authFetch(`${API_BASE_URL}/feedback`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -159,6 +190,6 @@ export async function submitFeedback(payload: FeedbackRequest): Promise<void> {
 }
 
 export async function fetchHealth(): Promise<HealthStats> {
-  const response = await fetch(`${API_BASE_URL}/health`)
+  const response = await authFetch(`${API_BASE_URL}/health`)
   return parseJson<HealthStats>(response)
 }

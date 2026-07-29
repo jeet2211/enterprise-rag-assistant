@@ -1,7 +1,7 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 
 fastapi==0.115.0
-uvicorn[standard]==0.30.6
+uvicorn[standard]==0.31.1
 langchain==0.3.0
 langchain-community==0.3.0
 langchain-google-genai==2.0.0
@@ -11,9 +11,10 @@ sentence-transformers==3.1.1
 torch>=2.6.0
 pymupdf==1.24.14
 python-multipart==0.0.12
-pydantic==2.9.2
+pydantic==2.11.7
 pydantic-settings==2.5.2
 python-dotenv==1.0.1
+email-validator==2.2.0
 sqlalchemy==2.0.35
 aiofiles==24.1.0
 celery[redis]==5.4.0
@@ -35,3 +36,8 @@ opentelemetry-instrumentation-asgi==0.48b0
 opentelemetry-instrumentation-fastapi==0.48b0
 opentelemetry-semantic-conventions==0.48b0
 opentelemetry-util-http==0.48b0
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+alembic==1.13.2
+psycopg2-binary==2.9.9
+prometheus-fastapi-instrumentator==7.0.0

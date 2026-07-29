@@ -16,6 +16,8 @@ from app.api.routes.documents import router as documents_router
 from app.api.routes.feedback import router as feedback_router
 from app.api.routes.health import router as health_router
 from app.api.routes.upload import router as upload_router
+from app.api.routes.auth import router as auth_router
+from prometheus_fastapi_instrumentator import Instrumentator
 from app.config.settings import get_settings
 from app.services.factory import build_app_services
 from app.utils.logger import configure_logging
@@ -50,6 +52,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Enterprise RAG Assistant", version="2.0.0", lifespan=lifespan)
+Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -88,6 +91,7 @@ app.include_router(upload_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
 app.include_router(documents_router, prefix="/api/v1")
 app.include_router(feedback_router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1")
 
 
 @app.get("/")

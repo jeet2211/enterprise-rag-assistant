@@ -1,0 +1,40 @@
+# Enterprise RAG Assistant — Production Caddyfile
+# Replace <DOMAIN> with your actual domain before deploying.
+# Caddy auto-provisions TLS via Let's Encrypt.
+
+{$DOMAIN:localhost} {
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    handle /api/* {
+        reverse_proxy backend:8000 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    handle /metrics {
+        respond 403
+    }
+
+    handle {
+        reverse_proxy frontend:80 {
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    encode gzip
+
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+    }
+}

@@ -23,6 +23,31 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: rag-postgres
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      POSTGRES_DB: ragdb
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d ragdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   backend:
     build:
       context: ./backend
@@ -39,6 +64,7 @@ services:
     environment:
       UPLOAD_DIR: /app/backend/uploads
       CHROMA_PERSIST_DIR: /app/backend/chroma_db
+      # Stays as SQLite for local dev. Prod compose overrides this with Postgres.
       DATABASE_URL: sqlite:////app/backend/data/app.db
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -54,6 +80,8 @@ services:
     networks:
       - rag-network
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -99,6 +127,7 @@ services:
     environment:
       UPLOAD_DIR: /app/backend/uploads
       CHROMA_PERSIST_DIR: /app/backend/chroma_db
+      # Stays as SQLite for local dev. Prod compose overrides this with Postgres.
       DATABASE_URL: sqlite:////app/backend/data/app.db
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -112,6 +141,8 @@ services:
     networks:
       - rag-network
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
       backend:
@@ -160,3 +191,4 @@ volumes:
   backend_chroma:
   backend_sqlite:
   redis_data:
+  postgres_data:
