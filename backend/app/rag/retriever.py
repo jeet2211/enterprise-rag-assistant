@@ -4,7 +4,7 @@ from collections import defaultdict
 import re
 from datetime import datetime, timezone
 from collections.abc import Sequence
-from typing import cast
+from typing import Any, cast
 
 import chromadb
 from chromadb.api.types import Include
@@ -172,7 +172,7 @@ class Retriever:
 
         try:
             query_embedding = self.embedding_service.embed_query(query)
-            include: Include = ["documents", "metadatas", "distances", "embeddings"]
+            include: Any = ["documents", "metadatas", "distances", "embeddings"]
             result = self.collection.query(
                 query_embeddings=[query_embedding],
                 n_results=candidate_top_k,
