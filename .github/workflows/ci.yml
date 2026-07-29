@@ -40,7 +40,7 @@ jobs:
         image: redis:7.4-alpine
         ports: ['6379:6379']
     env:
-      DATABASE_URL: sqlite:///:memory:
+      DATABASE_URL: 'sqlite:///:memory:'
       REDIS_URL: redis://localhost:6379/0
       CELERY_TASK_ALWAYS_EAGER: 'true'
       GEMINI_API_KEY: 'test-key'
