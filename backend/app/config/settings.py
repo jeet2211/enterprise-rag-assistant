@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     retrieval_mmr_lambda: float = 0.75
     retrieval_max_chunks_per_page: int = 2
     no_answer_threshold: float = 0.55  # cosine distance above which we refuse to answer
+    chat_context_top_k: int = 5
+    chat_context_chunk_chars: int = 1200
+    chat_sync_followups: bool = False
+    chat_llm_verifier_min_confidence: str = "low"
+    warm_embedding_model_on_startup: bool = True
     max_file_mb: int = 50
     session_memory_k: int = 10
     chroma_persist_dir: str = "./backend/chroma_db"

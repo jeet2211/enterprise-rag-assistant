@@ -120,6 +120,47 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 - `GET /api/v1/health` - service health check
 - `GET /api/v1/health/worker` - Redis/Celery worker health check
 
+## MCP server
+
+The backend includes an MCP server that exposes the RAG assistant to MCP-compatible clients such as Claude Desktop,
+Cursor, or Codex. It runs over stdio and calls the existing FastAPI backend, so start the backend first.
+
+Install dependencies and run it locally:
+
+```bash
+cd backend
+pip install -r requirements.txt
+MCP_RAG_API_BASE_URL=http://localhost:8000/api/v1 python -m app.mcp_server
+```
+
+Example MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "enterprise-rag-assistant": {
+      "command": "python",
+      "args": ["-m", "app.mcp_server"],
+      "cwd": "/Users/jeet/Documents/Enterprice RAG Assistent/backend",
+      "env": {
+        "MCP_RAG_API_BASE_URL": "http://localhost:8000/api/v1"
+      }
+    }
+  }
+}
+```
+
+Available MCP tools:
+
+- `check_rag_health`
+- `check_worker_health`
+- `list_documents`
+- `get_document`
+- `get_document_status`
+- `ask_rag`
+- `upload_pdf`
+- `delete_document`
+
 ## Background processing
 
 Uploads are queued through Celery:

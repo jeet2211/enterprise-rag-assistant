@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { sendChat } from '../api/client'
+import { sendChatStream } from '../api/client'
 import type { Confidence, Message } from '../types'
 
 function createSessionId() {
@@ -53,12 +53,46 @@ export function useChat() {
       setError(null)
 
       try {
-        const response = await sendChat({
-          question: trimmed,
-          session_id: sessionId,
-          top_k: 5,
-          document_ids: documentIds && documentIds.length > 0 ? documentIds : null,
-        })
+        const response = await sendChatStream(
+          {
+            question: trimmed,
+            session_id: sessionId,
+            top_k: 5,
+            document_ids: documentIds && documentIds.length > 0 ? documentIds : null,
+          },
+          {
+            onToken: (text) => {
+              if (!text) return
+              setMessages((current) =>
+                current.map((message) =>
+                  message.id === pendingMessage.id
+                    ? { ...message, content: `${message.content}${text}` }
+                    : message
+                )
+              )
+            },
+            onReplace: (text) => {
+              setMessages((current) =>
+                current.map((message) =>
+                  message.id === pendingMessage.id ? { ...message, content: text } : message
+                )
+              )
+            },
+            onTrace: (data) => {
+              setMessages((current) =>
+                current.map((message) =>
+                  message.id === pendingMessage.id
+                    ? {
+                        ...message,
+                        confidence: data.confidence as Confidence,
+                        trace_id: data.trace_id,
+                      }
+                    : message
+                )
+              )
+            },
+          }
+        )
 
         setMessages((current) =>
           current.map((message) =>

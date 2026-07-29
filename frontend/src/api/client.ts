@@ -37,7 +37,9 @@ export async function fetchDocument(documentId: string): Promise<DocumentDetail>
   return parseJson<DocumentDetail>(response)
 }
 
-export async function fetchDocumentStatus(documentId: string): Promise<{ id: string; status: string; error_msg?: string | null }> {
+type DocumentStatusResponse = { id: string; status: string; error_msg?: string | null }
+
+export async function fetchDocumentStatus(documentId: string): Promise<DocumentStatusResponse> {
   const response = await fetch(`${API_BASE_URL}/documents/${documentId}/status`)
   return parseJson(response)
 }
@@ -78,6 +80,73 @@ export async function sendChat(payload: ChatRequest): Promise<ChatResponse> {
     body: JSON.stringify(payload),
   })
   return parseJson<ChatResponse>(response)
+}
+
+interface ChatStreamHandlers {
+  onToken: (text: string) => void
+  onReplace?: (text: string) => void
+  onTrace?: (data: Partial<ChatResponse>) => void
+}
+
+function parseSseBlock(block: string): { event: string; data: unknown } | null {
+  let event = 'message'
+  const dataLines: string[] = []
+  for (const line of block.split('\n')) {
+    if (line.startsWith('event:')) {
+      event = line.slice('event:'.length).trim()
+    } else if (line.startsWith('data:')) {
+      dataLines.push(line.slice('data:'.length).trimStart())
+    }
+  }
+  if (dataLines.length === 0) return null
+  return { event, data: JSON.parse(dataLines.join('\n')) }
+}
+
+export async function sendChatStream(payload: ChatRequest, handlers: ChatStreamHandlers): Promise<ChatResponse> {
+  const response = await fetch(`${API_BASE_URL}/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok || !response.body) {
+    return sendChat(payload)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let finalResponse: ChatResponse | null = null
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const blocks = buffer.split('\n\n')
+    buffer = blocks.pop() ?? ''
+
+    for (const block of blocks) {
+      const parsed = parseSseBlock(block.trim())
+      if (!parsed) continue
+
+      if (parsed.event === 'token') {
+        handlers.onToken((parsed.data as { text?: string }).text ?? '')
+      } else if (parsed.event === 'replace') {
+        handlers.onReplace?.((parsed.data as { text?: string }).text ?? '')
+      } else if (parsed.event === 'trace') {
+        handlers.onTrace?.(parsed.data as Partial<ChatResponse>)
+      } else if (parsed.event === 'final') {
+        finalResponse = parsed.data as ChatResponse
+      } else if (parsed.event === 'error') {
+        throw new Error((parsed.data as { detail?: string }).detail ?? 'Streaming chat failed')
+      }
+    }
+  }
+
+  if (!finalResponse) {
+    throw new Error('Streaming chat ended without a final response')
+  }
+  return finalResponse
 }
 
 export async function submitFeedback(payload: FeedbackRequest): Promise<void> {

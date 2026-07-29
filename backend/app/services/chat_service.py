@@ -52,9 +52,16 @@ def _compute_confidence(distances: list[float], no_answer_threshold: float) -> s
     return "low"
 
 
+def _should_run_verifier(confidence: str, min_confidence: str) -> bool:
+    order = {"not_found": 0, "low": 1, "medium": 2, "high": 3}
+    threshold = order.get(min_confidence, order["low"])
+    return order.get(confidence, 0) <= threshold
+
+
 def _route_question(question: str) -> str:
     lower = question.lower()
-    if re.search(r"\b[A-Z][A-Z0-9_]{2,}\b", question) or any(token in lower for token in ("optimal", "threshold", "tune", "tuning", "parameter", "config")):
+    parameter_terms = ("optimal", "threshold", "tune", "tuning", "parameter", "config")
+    if re.search(r"\b[A-Z][A-Z0-9_]{2,}\b", question) or any(token in lower for token in parameter_terms):
         return "parameter"
     if any(
         token in lower
@@ -155,7 +162,12 @@ class ChatService:
         return self._llm
 
     @staticmethod
-    def _format_context(matches: list[dict[str, object]]) -> str:
+    def _trim_text(text: str, limit: int) -> str:
+        if limit <= 0 or len(text) <= limit:
+            return text
+        return text[:limit].rsplit(" ", 1)[0].rstrip() + "..."
+
+    def _format_context(self, matches: list[dict[str, object]]) -> str:
         context_parts = []
         for match in matches:
             metadata = match["metadata"] or {}
@@ -163,8 +175,66 @@ class ChatService:
             page_number = int(metadata.get("page_number", 0))
             section_title = str(metadata.get("section_title", "")).strip()
             section_prefix = f"Section: {section_title} | " if section_title else ""
-            context_parts.append(f"[{document_name} p.{page_number}] {section_prefix}{match['text']}")
+            text = self._trim_text(str(match["text"]), self.settings.chat_context_chunk_chars)
+            context_parts.append(f"[{document_name} p.{page_number}] {section_prefix}{text}")
         return "\n\n".join(context_parts)
+
+    def _build_citations(self, matches: list[dict[str, object]]) -> list[Citation]:
+        citations: list[Citation] = []
+        for match in matches:
+            metadata = match["metadata"] or {}
+            citations.append(
+                Citation(
+                    document_name=str(metadata.get("document_name", "Unknown document")),
+                    page_number=int(metadata.get("page_number", 0)),
+                    chunk_preview=str(metadata.get("chunk_preview", match["text"]))[:200],
+                    token_count=int(metadata.get("token_count", 0)),
+                    doc_id=str(metadata.get("doc_id", "")),
+                    distance=float(match["distance"]),
+                    section_title=str(metadata.get("section_title", "")),
+                )
+            )
+        return citations
+
+    @staticmethod
+    def _record_timing(timings: dict[str, float], name: str, start: float) -> None:
+        timings[name] = round((time.perf_counter() - start) * 1000, 1)
+
+    def _retrieve(
+        self,
+        *,
+        question: str,
+        top_k: int | None,
+        document_ids: list[str] | None,
+        timings: dict[str, float],
+    ) -> tuple[list[dict[str, object]], list[Citation], str]:
+        requested_top_k = min(top_k or self.settings.top_k, self.settings.chat_context_top_k)
+        route = _route_question(question)
+        if route == "parameter":
+            candidate_multiplier = max(self.settings.retrieval_candidate_multiplier, 5)
+            mmr_lambda = min(self.settings.retrieval_mmr_lambda, 0.55)
+        elif route == "explanation":
+            candidate_multiplier = max(self.settings.retrieval_candidate_multiplier, 4)
+            mmr_lambda = min(self.settings.retrieval_mmr_lambda, 0.65)
+        else:
+            candidate_multiplier = self.settings.retrieval_candidate_multiplier
+            mmr_lambda = self.settings.retrieval_mmr_lambda
+
+        t_stage = time.perf_counter()
+        matches = self.retriever.search(
+            question,
+            top_k=requested_top_k,
+            document_ids=document_ids or None,
+            candidate_multiplier=candidate_multiplier,
+            mmr_lambda=mmr_lambda,
+            max_chunks_per_page=self.settings.retrieval_max_chunks_per_page,
+        )
+        self._record_timing(timings, "retrieval_ms", t_stage)
+
+        citations = self._build_citations(matches)
+        distances = [float(m["distance"]) for m in matches]
+        confidence = _compute_confidence(distances, self.settings.no_answer_threshold)
+        return matches, citations, confidence
 
     def _verify_answer(self, *, question: str, answer: str, context: str) -> dict[str, str | bool]:
         key_terms = _extract_key_terms(question)
@@ -174,10 +244,18 @@ class ChatService:
             # If the question asks about specific symbols/parameters, require
             # those exact symbols to be present. Otherwise let the LLM judge.
             if missing_terms and len(key_terms) <= 4:
-                return {"evidence_status": "not_found", "allow_answer": False, "reason": f"Missing key terms in context: {', '.join(missing_terms[:4])}"}
+                return {
+                    "evidence_status": "not_found",
+                    "allow_answer": False,
+                    "reason": f"Missing key terms in context: {', '.join(missing_terms[:4])}",
+                }
         llm = self._load_llm()
         if llm is None:
-            return {"evidence_status": "partial", "allow_answer": True, "reason": "Verifier unavailable; using retrieval confidence only."}
+            return {
+                "evidence_status": "partial",
+                "allow_answer": True,
+                "reason": "Verifier unavailable; using retrieval confidence only.",
+            }
         try:
             response = llm.invoke(build_verifier_prompt(question, answer, context))
             raw = response.content if hasattr(response, "content") else str(response)
@@ -189,7 +267,11 @@ class ChatService:
                 evidence_status = "partial"
             return {"evidence_status": evidence_status, "allow_answer": allow_answer, "reason": reason}
         except Exception:
-            return {"evidence_status": "partial", "allow_answer": True, "reason": "Verifier could not parse model output."}
+            return {
+                "evidence_status": "partial",
+                "allow_answer": True,
+                "reason": "Verifier could not parse model output.",
+            }
 
     def answer(
         self,
@@ -209,51 +291,13 @@ class ChatService:
         answer_style = "supported"
         follow_up_questions: list[str] = []
 
-        requested_top_k = top_k or self.settings.top_k
-        route = _route_question(question)
-        if route == "parameter":
-            candidate_multiplier = max(self.settings.retrieval_candidate_multiplier, 6)
-            mmr_lambda = min(self.settings.retrieval_mmr_lambda, 0.55)
-        elif route == "explanation":
-            requested_top_k = max(requested_top_k, min(self.settings.top_k + 2, 8))
-            candidate_multiplier = max(self.settings.retrieval_candidate_multiplier, 5)
-            mmr_lambda = min(self.settings.retrieval_mmr_lambda, 0.65)
-        else:
-            candidate_multiplier = self.settings.retrieval_candidate_multiplier
-            mmr_lambda = self.settings.retrieval_mmr_lambda
-
-        matches = self.retriever.search(
-            question,
-            top_k=requested_top_k,
-            document_ids=document_ids or None,
-            candidate_multiplier=candidate_multiplier,
-            mmr_lambda=mmr_lambda,
-            max_chunks_per_page=self.settings.retrieval_max_chunks_per_page,
+        timings: dict[str, float] = {}
+        matches, citations, confidence = self._retrieve(
+            question=question,
+            top_k=top_k,
+            document_ids=document_ids,
+            timings=timings,
         )
-
-        distances = [float(m["distance"]) for m in matches]
-        confidence = _compute_confidence(distances, self.settings.no_answer_threshold)
-
-        context_parts = []
-        citations: list[Citation] = []
-        for match in matches:
-            metadata = match["metadata"] or {}
-            document_name = str(metadata.get("document_name", "Unknown document"))
-            page_number = int(metadata.get("page_number", 0))
-            token_count = int(metadata.get("token_count", 0))
-            chunk_preview = str(metadata.get("chunk_preview", match["text"]))[:200]
-            doc_id = str(metadata.get("doc_id", ""))
-            citations.append(
-                Citation(
-                    document_name=document_name,
-                    page_number=page_number,
-                    chunk_preview=chunk_preview,
-                    token_count=token_count,
-                    doc_id=doc_id,
-                    distance=float(match["distance"]),
-                    section_title=str(metadata.get("section_title", "")),
-                )
-            )
 
         # If confidence is not_found, skip LLM call entirely
         if confidence == "not_found":
@@ -261,9 +305,11 @@ class ChatService:
             evidence_status = "not_found"
             answer_style = "refused"
         else:
+            t_stage = time.perf_counter()
             history = self.memory_store.render(session_id)
             full_context = self._format_context(matches)
             prompt = build_prompt(history=history, context=full_context, question=question)
+            self._record_timing(timings, "prompt_ms", t_stage)
             llm = self._load_llm()
 
             if llm is None:
@@ -273,8 +319,10 @@ class ChatService:
                 answer_style = "supported"
             else:
                 try:
+                    t_stage = time.perf_counter()
                     response = llm.invoke(prompt)
                     answer_text = response.content if hasattr(response, "content") else str(response)
+                    self._record_timing(timings, "llm_answer_ms", t_stage)
                 except Exception as exc:
                     logger.error(
                         '{"event":"llm_error","trace_id":"%s","error":"%s"}',
@@ -287,15 +335,24 @@ class ChatService:
                     evidence_status = "partial"
                     answer_style = "supported"
                 else:
-                    follow_up_questions = self._generate_followups(full_context, llm)
-                    verifier = self._verify_answer(question=question, answer=answer_text, context=full_context)
-                    evidence_status = str(verifier["evidence_status"])
-                    if not bool(verifier["allow_answer"]):
-                        answer_text = "I could not find this information in the uploaded documents."
-                        follow_up_questions = []
-                        evidence_status = "not_found"
-                        answer_style = "refused"
+                    if self.settings.chat_sync_followups:
+                        t_stage = time.perf_counter()
+                        follow_up_questions = self._generate_followups(full_context, llm)
+                        self._record_timing(timings, "followups_ms", t_stage)
+                    if _should_run_verifier(confidence, self.settings.chat_llm_verifier_min_confidence):
+                        t_stage = time.perf_counter()
+                        verifier = self._verify_answer(question=question, answer=answer_text, context=full_context)
+                        self._record_timing(timings, "verifier_ms", t_stage)
+                        evidence_status = str(verifier["evidence_status"])
+                        if not bool(verifier["allow_answer"]):
+                            answer_text = "I could not find this information in the uploaded documents."
+                            follow_up_questions = []
+                            evidence_status = "not_found"
+                            answer_style = "refused"
+                        else:
+                            answer_style = "supported"
                     else:
+                        evidence_status = "exact" if confidence == "high" else "partial"
                         answer_style = "supported"
 
         latency_ms = round((time.perf_counter() - t_start) * 1000, 1)
@@ -309,7 +366,24 @@ class ChatService:
 
         # Persist to DB if session_factory is available
         if self.session_factory is not None:
-            self._persist_messages(session_id, question, answer_text, citations, confidence, trace_id, latency_ms, document_ids)
+            t_stage = time.perf_counter()
+            self._persist_messages(
+                session_id,
+                question,
+                answer_text,
+                citations,
+                confidence,
+                trace_id,
+                latency_ms,
+                document_ids,
+            )
+            self._record_timing(timings, "persist_ms", t_stage)
+
+        logger.info(
+            '{"event":"chat_timing","trace_id":"%s","timings":%s}',
+            trace_id,
+            json.dumps(timings, sort_keys=True),
+        )
 
         return {
             "answer": answer_text,
@@ -320,6 +394,126 @@ class ChatService:
             "trace_id": trace_id,
             "follow_up_questions": follow_up_questions,
             "latency_ms": latency_ms,
+        }
+
+    def answer_stream(
+        self,
+        *,
+        question: str,
+        session_id: str,
+        top_k: int | None = None,
+        document_ids: list[str] | None = None,
+    ):
+        trace_id = str(uuid.uuid4())
+        t_start = time.perf_counter()
+        timings: dict[str, float] = {}
+        evidence_status = "partial"
+        answer_style = "supported"
+        answer_parts: list[str] = []
+
+        matches, citations, confidence = self._retrieve(
+            question=question,
+            top_k=top_k,
+            document_ids=document_ids,
+            timings=timings,
+        )
+
+        yield {"event": "trace", "data": {"trace_id": trace_id, "confidence": confidence}}
+
+        if confidence == "not_found":
+            answer_text = "I could not find this information in the uploaded documents."
+            answer_parts.append(answer_text)
+            evidence_status = "not_found"
+            answer_style = "refused"
+            yield {"event": "token", "data": {"text": answer_text}}
+        else:
+            t_stage = time.perf_counter()
+            history = self.memory_store.render(session_id)
+            full_context = self._format_context(matches)
+            prompt = build_prompt(history=history, context=full_context, question=question)
+            self._record_timing(timings, "prompt_ms", t_stage)
+            llm = self._load_llm()
+
+            if llm is None:
+                answer_text = self._fallback_answer(question, citations)
+                answer_parts.append(answer_text)
+                yield {"event": "token", "data": {"text": answer_text}}
+            else:
+                t_stage = time.perf_counter()
+                try:
+                    for chunk in llm.stream(prompt):
+                        text = chunk.content if hasattr(chunk, "content") else str(chunk)
+                        if not text:
+                            continue
+                        answer_parts.append(text)
+                        yield {"event": "token", "data": {"text": text}}
+                except Exception:
+                    if not answer_parts:
+                        response = llm.invoke(prompt)
+                        text = response.content if hasattr(response, "content") else str(response)
+                        answer_parts.append(text)
+                        yield {"event": "token", "data": {"text": text}}
+                    else:
+                        raise
+                self._record_timing(timings, "llm_answer_ms", t_stage)
+
+                answer_text = "".join(answer_parts)
+                if _should_run_verifier(confidence, self.settings.chat_llm_verifier_min_confidence):
+                    t_stage = time.perf_counter()
+                    verifier = self._verify_answer(question=question, answer=answer_text, context=full_context)
+                    self._record_timing(timings, "verifier_ms", t_stage)
+                    evidence_status = str(verifier["evidence_status"])
+                    if not bool(verifier["allow_answer"]):
+                        answer_text = "I could not find this information in the uploaded documents."
+                        answer_parts[:] = [answer_text]
+                        evidence_status = "not_found"
+                        answer_style = "refused"
+                        yield {"event": "replace", "data": {"text": answer_text}}
+                else:
+                    evidence_status = "exact" if confidence == "high" else "partial"
+
+        answer_text = "".join(answer_parts)
+        latency_ms = round((time.perf_counter() - t_start) * 1000, 1)
+        self.memory_store.add_turn(session_id, question, answer_text)
+        if self.session_factory is not None:
+            t_stage = time.perf_counter()
+            self._persist_messages(
+                session_id,
+                question,
+                answer_text,
+                citations,
+                confidence,
+                trace_id,
+                latency_ms,
+                document_ids,
+            )
+            self._record_timing(timings, "persist_ms", t_stage)
+
+        logger.info(
+            '{"event":"chat_request","trace_id":"%s","session_id":"%s","confidence":"%s",'
+            '"sources":%d,"latency_ms":%s}',
+            trace_id, session_id, confidence, len(citations), latency_ms,
+        )
+        logger.info(
+            '{"event":"chat_timing","trace_id":"%s","timings":%s}',
+            trace_id,
+            json.dumps(timings, sort_keys=True),
+        )
+
+        yield {
+            "event": "final",
+            "data": {
+                "answer": answer_text,
+                "citations": [citation.model_dump() for citation in citations],
+                "session_id": session_id,
+                "sources_used": len(citations),
+                "confidence": confidence,
+                "evidence_status": evidence_status,
+                "answer_style": answer_style,
+                "trace_id": trace_id,
+                "follow_up_questions": [],
+                "latency_ms": latency_ms,
+            },
         }
 
     def _generate_followups(self, context: str, llm) -> list[str]:

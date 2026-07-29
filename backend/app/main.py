@@ -42,6 +42,10 @@ async def lifespan(app: FastAPI):
     app.state.start_time = datetime.utcnow()
     app.state.now = datetime.utcnow
 
+    if settings.warm_embedding_model_on_startup:
+        services.embedding_service.embed_query("warmup")
+        services.retriever.healthcheck()
+
     yield
 
 

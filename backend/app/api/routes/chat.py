@@ -1,4 +1,7 @@
+import json
+
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_chat_service
 from app.config.settings import get_settings
@@ -30,3 +33,25 @@ def chat(request: Request, payload: ChatRequest, chat_service=Depends(get_chat_s
         follow_up_questions=result["follow_up_questions"],
         latency_ms=result["latency_ms"],
     )
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+@router.post("/stream")
+@limiter.limit(get_settings().rate_limit_chat)
+def chat_stream(request: Request, payload: ChatRequest, chat_service=Depends(get_chat_service)):
+    def events():
+        try:
+            for item in chat_service.answer_stream(
+                question=payload.question,
+                session_id=payload.session_id,
+                top_k=payload.top_k,
+                document_ids=payload.document_ids,
+            ):
+                yield _sse(item["event"], item["data"])
+        except Exception as exc:
+            yield _sse("error", {"detail": str(exc)})
+
+    return StreamingResponse(events(), media_type="text/event-stream")
