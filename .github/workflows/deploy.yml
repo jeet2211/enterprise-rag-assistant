@@ -91,7 +91,7 @@ jobs:
 
             echo "==> Waiting for backend health..."
             for i in $(seq 1 12); do
-              if curl -sf https://${{ secrets.DOMAIN }}/api/v1/health > /dev/null; then
+              if curl -fsS --max-time 10 http://localhost:8000/api/v1/health > /dev/null; then
                 echo "Backend healthy!"
                 break
               fi
@@ -100,8 +100,8 @@ jobs:
             done
 
             echo "==> Smoke tests..."
-            curl -f https://${{ secrets.DOMAIN }}/api/v1/health
-            curl -f https://${{ secrets.DOMAIN }}/ > /dev/null
+            curl -fsS --retry 5 --retry-delay 3 --retry-all-errors --max-time 15 https://${{ secrets.DOMAIN }}/api/v1/health
+            curl -fsS --retry 5 --retry-delay 3 --retry-all-errors --max-time 15 https://${{ secrets.DOMAIN }}/ > /dev/null
 
             echo "==> Deployment complete! SHA: ${{ github.sha }}"
 
