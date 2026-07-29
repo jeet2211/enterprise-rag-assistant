@@ -63,6 +63,9 @@ jobs:
             set -e
             cd /opt/rag-assistant
 
+            echo "==> Ensuring shared deploy network exists..."
+            docker network inspect deploy_internal >/dev/null 2>&1 || docker network create deploy_internal
+
             echo "==> Pulling latest images..."
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
 
