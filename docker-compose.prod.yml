@@ -13,6 +13,7 @@ services:
     ports: !reset []
 
   backend:
+    image: ghcr.io/jeet2211/enterprise-rag-backend:latest
     restart: always
     # Remove direct port exposure — only accessible via reverse proxy
     ports: !reset []
@@ -32,6 +33,7 @@ services:
         condition: service_healthy
 
   worker:
+    image: ghcr.io/jeet2211/enterprise-rag-backend:latest
     restart: always
     networks:
       - rag-network
@@ -46,6 +48,7 @@ services:
         condition: service_healthy
 
   frontend:
+    image: ghcr.io/jeet2211/enterprise-rag-frontend:latest
     restart: always
     # Remove direct port exposure
     ports: !reset []
