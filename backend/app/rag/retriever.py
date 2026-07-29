@@ -4,6 +4,7 @@ from collections import defaultdict
 import re
 from datetime import datetime, timezone
 from collections.abc import Sequence
+from typing import cast
 
 import chromadb
 
@@ -180,10 +181,10 @@ class Retriever:
             # Collection may be empty or filter matched nothing — return empty
             return []
 
-        documents = result.get("documents", [[]])[0]
-        metadatas = result.get("metadatas", [[]])[0]
-        distances = result.get("distances", [[]])[0]
-        embeddings = result.get("embeddings", [[]])[0]
+        documents = cast(list[list[str]], result.get("documents") or [[]])[0]
+        metadatas = cast(list[list[dict[str, object]]], result.get("metadatas") or [[]])[0]
+        distances = cast(list[list[float]], result.get("distances") or [[]])[0]
+        embeddings = cast(list[list[Sequence[float]]], result.get("embeddings") or [[]])[0]
         matches: list[dict[str, object]] = []
         for text, metadata, distance, embedding in zip(documents, metadatas, distances, embeddings):
             matches.append(
