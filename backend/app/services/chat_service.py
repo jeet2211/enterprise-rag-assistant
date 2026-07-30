@@ -232,6 +232,9 @@ class ChatService:
             mmr_lambda=mmr_lambda,
             max_chunks_per_page=self.settings.retrieval_max_chunks_per_page,
         )
+        # Keep the most relevant chunk first so the answer/verifier prompts
+        # preserve the strongest evidence even when later chunks are truncated.
+        matches = sorted(matches, key=lambda match: float(match["distance"]))
         self._record_timing(timings, "retrieval_ms", t_stage)
 
         citations = self._build_citations(matches)
