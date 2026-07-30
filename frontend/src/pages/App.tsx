@@ -17,6 +17,7 @@ function AppContent() {
   const [authView, setAuthView] = useState<'login' | 'signup'>('login')
 
   const { logout, token } = useAuth()
+  const authReady = Boolean(token)
 
   // Keep the API client in sync with the current access token.
   // This runs whenever the token changes (login / logout / refresh).
@@ -32,7 +33,7 @@ function AppContent() {
     return () => window.removeEventListener('auth:logout', handler)
   }, [logout])
 
-  const documents = useDocuments()
+  const documents = useDocuments({ enabled: authReady })
   const chat = useChat()
 
   const combinedError = chat.error ?? documents.error

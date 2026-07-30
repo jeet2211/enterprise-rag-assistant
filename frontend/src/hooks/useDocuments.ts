@@ -11,7 +11,12 @@ const IN_PROGRESS_STATUSES = new Set([
   'indexing',
 ])
 
-export function useDocuments() {
+interface UseDocumentsOptions {
+  enabled?: boolean
+}
+
+export function useDocuments(options: UseDocumentsOptions = {}) {
+  const { enabled = true } = options
   const [documents, setDocuments] = useState<DocumentItem[]>([])
   const [loading, setLoading] = useState(true)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -34,11 +39,16 @@ export function useDocuments() {
   }, [])
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false)
+      return
+    }
     void refresh()
-  }, [refresh])
+  }, [enabled, refresh])
 
   // Poll while any document is still processing
   useEffect(() => {
+    if (!enabled) return
     const hasInProgress = documents.some((doc) => IN_PROGRESS_STATUSES.has(doc.status))
     if (!hasInProgress) return
 
@@ -47,7 +57,7 @@ export function useDocuments() {
     }, 2500)
 
     return () => window.clearInterval(interval)
-  }, [documents, refresh])
+  }, [enabled, documents, refresh])
 
   const upload = useCallback(
     async (file: File) => {
