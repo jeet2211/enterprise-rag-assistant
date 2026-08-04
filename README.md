@@ -4,7 +4,7 @@ A full-stack RAG application for uploading PDF documents and asking grounded que
 
 ## Stack
 
-- Backend: FastAPI, Celery, Redis, SQLite, ChromaDB, PyMuPDF, Sentence Transformers, Gemini
+- Backend: FastAPI, Celery, Redis, PostgreSQL, ChromaDB, PyMuPDF, Sentence Transformers, Gemini
 - Frontend: React, Vite, TypeScript
 - Runtime: Docker + Docker Compose
 
@@ -35,12 +35,14 @@ cp .env.example .env
 2. Open `.env` and set:
 
 - `GEMINI_API_KEY`
+- `POSTGRES_PASSWORD`
+- `SECRET_KEY`
 - Any optional tuning values you want to change, such as `CHUNK_SIZE`, `TOP_K`, or `MAX_FILE_MB`
 - Optional background processing values such as `REDIS_URL`, `CELERY_BROKER_URL`, or `CELERY_RESULT_BACKEND`
 
 ## Start the app with Docker
 
-1. Copy `.env.example` to `.env` and set `GEMINI_API_KEY`.
+1. Copy `.env.example` to `.env` and set `GEMINI_API_KEY`, `POSTGRES_PASSWORD`, and `SECRET_KEY`.
 2. Start the stack from the repository root:
 
 ```bash
@@ -55,10 +57,11 @@ docker compose up --build
 
 ## What happens on startup
 
-- The backend creates the SQLite database if it does not exist
+- The backend runs Alembic migrations against PostgreSQL
 - The backend creates upload and Chroma persistence folders
 - Redis starts as the Celery broker/result backend
 - The worker consumes document-processing tasks from Redis
+- Celery beat schedules recurring evaluation jobs
 - The frontend is built and served by nginx
 - The frontend talks to the backend at `http://localhost:8000/api/v1`
 
@@ -69,6 +72,15 @@ docker compose up --build
 - `http://localhost:8000/api/v1/health/worker` - Redis/Celery worker health check
 - `http://localhost:8000/docs` - Swagger UI
 - `http://localhost:8000/redoc` - ReDoc
+
+## Grafana
+
+The Monitoring page links to a self-hosted Grafana instance at `/grafana` on your app domain.
+
+- Username: `admin`
+- Password: the value of `GRAFANA_PASSWORD`
+
+This is separate from a Grafana Cloud account, so `grafana.com` credentials will not work here.
 
 ## Stop the app
 
@@ -170,8 +182,38 @@ Uploads are queued through Celery:
 3. The worker reads the task, extracts PDF text, chunks it, embeds it, indexes it in ChromaDB, and updates the
    document status.
 
-The Docker worker starts with `--concurrency=1` to avoid SQLite and ChromaDB write contention. Increase this only
-after load testing, or move the database to Postgres first.
+The Docker worker starts with `--concurrency=1` to keep ChromaDB writes predictable. Increase this only after load testing.
+
+## Production Deployment
+
+Use the production override with your deployment environment variables:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+Required production variables:
+
+- `DOMAIN`
+- `GEMINI_API_KEY`
+- `POSTGRES_PASSWORD`
+- `SECRET_KEY`
+- `PUBLIC_APP_URL`
+- `API_BASE_URL`
+- `CORS_ORIGINS`
+
+Optional observability variables:
+
+- `LANGFUSE_SECRET_KEY`
+- `LANGFUSE_PUBLIC_KEY`
+- `LANGFUSE_HOST`
+- `GRAFANA_PASSWORD`
+
+For production, create the external Docker network referenced by `docker-compose.prod.yml` before first start:
+
+```bash
+docker network create deploy_internal
+```
 
 ## Troubleshooting
 

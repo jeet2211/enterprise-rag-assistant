@@ -22,7 +22,7 @@ COPY . .
 # Create a non-root user and group, create directories, and set permissions
 RUN groupadd -g 10001 appgroup && \
     useradd -u 10001 -g appgroup -d /app/backend -s /bin/bash appuser && \
-    mkdir -p /app/backend/uploads /app/backend/chroma_db /app/backend/data && \
+    mkdir -p /app/backend/uploads /app/backend/chroma_db && \
     chown -R appuser:appgroup /app/backend && \
     chmod +x /app/backend/docker-entrypoint.sh
 

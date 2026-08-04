@@ -206,6 +206,62 @@ class Retriever:
             max_chunks_per_page=max_chunks_per_page,
         )
 
+    def get_document_chunks(self, document_ids: list[str], limit: int = 5) -> list[dict[str, object]]:
+        """Return representative chunks from selected documents in page order."""
+        if not document_ids:
+            return []
+
+        where: dict[str, object]
+        if len(document_ids) == 1:
+            where = {"doc_id": {"$eq": document_ids[0]}}
+        else:
+            where = {"doc_id": {"$in": document_ids}}
+
+        try:
+            result = self.collection.get(
+                where=where,
+                limit=max(50, int(limit) * 12),
+                include=["documents", "metadatas"],
+            )
+        except Exception:
+            return []
+
+        documents = cast(list[str], result.get("documents") or [])
+        metadatas = cast(list[dict[str, object]], result.get("metadatas") or [])
+        matches: list[dict[str, object]] = []
+        for text, metadata in zip(documents, metadatas):
+            matches.append(
+                {
+                    "text": text,
+                    "metadata": metadata,
+                    # Representative chunks are not semantic matches; use a
+                    # low-confidence distance that still allows summary answers.
+                    "distance": 0.54,
+                    "embedding": None,
+                }
+            )
+
+        ordered = sorted(
+            matches,
+            key=lambda match: (
+                str((match.get("metadata") or {}).get("doc_id", "")),
+                int((match.get("metadata") or {}).get("page_number", 0)),
+                int((match.get("metadata") or {}).get("chunk_index", 0)),
+            ),
+        )
+        body_chunks = [
+            match
+            for match in ordered
+            if int((match.get("metadata") or {}).get("page_number", 0)) > 10
+        ]
+        candidates = body_chunks if len(body_chunks) >= limit else ordered
+        if len(candidates) <= limit:
+            return candidates
+
+        step = (len(candidates) - 1) / max(1, limit - 1)
+        indexes = [round(index * step) for index in range(limit)]
+        return [candidates[index] for index in indexes]
+
     def delete_document(self, document_id: str) -> None:
         try:
             self.collection.delete(where={"doc_id": document_id})

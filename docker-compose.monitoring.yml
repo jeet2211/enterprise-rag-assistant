@@ -32,11 +32,13 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: https://${DOMAIN:-localhost}/grafana
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/rag_metrics.json
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
     networks:
       - rag-network
+      - deploy_internal
     depends_on:
       - prometheus
     logging:
@@ -49,6 +51,7 @@ services:
     image: grafana/loki:2.9.4
     container_name: rag-loki
     restart: unless-stopped
+    user: "0"
     command: -config.file=/etc/loki/loki-config.yml
     volumes:
       - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
@@ -125,3 +128,7 @@ volumes:
   prometheus_data:
   grafana_data:
   loki_data:
+
+networks:
+  deploy_internal:
+    external: true

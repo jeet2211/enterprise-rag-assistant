@@ -1,7 +1,7 @@
 from functools import lru_cache
 import json
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,6 +49,19 @@ class Settings(BaseSettings):
     rate_limit_signup: str = Field(default="3/minute", alias="RATE_LIMIT_SIGNUP")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", protected_namespaces=(), populate_by_name=True)
+
+    @model_validator(mode="after")
+    def validate_production_settings(self) -> "Settings":
+        if self.app_env.lower() != "production":
+            return self
+
+        if not self.gemini_api_key or self.gemini_api_key == "your_gemini_api_key_here":
+            raise ValueError("GEMINI_API_KEY must be set in production")
+        if self.secret_key == "change-me-in-production-use-openssl-rand-hex-32":
+            raise ValueError("SECRET_KEY must be changed in production")
+        if "localhost" in self.public_app_url or "localhost" in self.api_base_url:
+            raise ValueError("PUBLIC_APP_URL and API_BASE_URL must use production URLs")
+        return self
 
     @property
     def cors_origins(self) -> list[str]:

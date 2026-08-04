@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from app.config.settings import get_settings
+from app.core.metrics import RAGMetrics
 from app.services.factory import build_app_services
 from app.tasks.celery_app import celery_app
 from app.utils.logger import configure_logging
@@ -49,6 +50,7 @@ def process_document_task(self, document_id: str, file_path: str, filename: str)
                 document_id,
                 str(exc),
             )
+            RAGMetrics.record_document_processed(status="failed")
             return {"status": "failed", "reason": str(exc)}
 
         logger.warning(
@@ -60,4 +62,5 @@ def process_document_task(self, document_id: str, file_path: str, filename: str)
         raise self.retry(exc=exc) from exc
 
     logger.info('{"event":"document_task_completed","document_id":"%s"}', document_id)
+    RAGMetrics.record_document_processed(status="ready")
     return {"status": "ready", "document_id": document_id}

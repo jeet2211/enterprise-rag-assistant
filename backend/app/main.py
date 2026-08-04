@@ -13,6 +13,7 @@ from slowapi import _rate_limit_exceeded_handler
 from app.core.rate_limit import limiter
 from app.api.routes.chat import router as chat_router
 from app.api.routes.documents import router as documents_router
+from app.api.routes.evals import router as evals_router
 from app.api.routes.feedback import router as feedback_router
 from app.api.routes.health import router as health_router
 from app.api.routes.upload import router as upload_router
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI):
     app.state.memory_store = services.memory_store
     app.state.chat_service = services.chat_service
     app.state.pipeline = services.pipeline
+    app.state.eval_service = services.eval_service
     app.state.start_time = datetime.utcnow()
     app.state.now = datetime.utcnow
 
@@ -94,6 +96,7 @@ app.include_router(upload_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
 app.include_router(documents_router, prefix="/api/v1")
 app.include_router(feedback_router, prefix="/api/v1")
+app.include_router(evals_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
 
 

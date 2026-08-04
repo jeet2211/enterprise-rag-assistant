@@ -65,12 +65,43 @@ class Feedback(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class EvalResult(Base):
+    """Stores RAGAS evaluation scores for assistant responses (populated by nightly batch job)."""
+
+    __tablename__ = "eval_results"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    trace_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    session_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    message_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    # RAGAS metric scores (0.0 – 1.0 scale)
+    faithfulness: Mapped[float | None] = mapped_column(Float, nullable=True)
+    answer_relevancy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    context_precision: Mapped[float | None] = mapped_column(Float, nullable=True)
+    overall_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Input snapshot for reproducibility
+    question: Mapped[str | None] = mapped_column(Text, nullable=True)
+    answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 def build_engine(db_url: str):
-    connect_args = {"check_same_thread": False} if db_url.startswith("sqlite") else {}
-    kwargs = {"connect_args": connect_args}
-    if db_url in {"sqlite:///:memory:", "sqlite://"}:
-        kwargs["poolclass"] = StaticPool
-    return create_engine(db_url, **kwargs)
+    """Build a SQLAlchemy engine with appropriate settings for PostgreSQL or SQLite."""
+    if db_url.startswith("sqlite"):
+        connect_args = {"check_same_thread": False}
+        kwargs: dict = {"connect_args": connect_args}
+        if db_url in {"sqlite:///:memory:", "sqlite://"}:
+            kwargs["poolclass"] = StaticPool
+        return create_engine(db_url, **kwargs)
+
+    # PostgreSQL — use a proper connection pool
+    return create_engine(
+        db_url,
+        pool_size=5,
+        max_overflow=10,
+        pool_pre_ping=True,   # verify connections before reuse
+        pool_recycle=3600,    # recycle connections every hour
+    )
 
 
 def build_session_factory(engine):

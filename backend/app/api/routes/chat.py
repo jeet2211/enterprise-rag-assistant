@@ -69,3 +69,36 @@ def chat_stream(
             yield _sse("error", {"detail": str(exc)})
 
     return StreamingResponse(events(), media_type="text/event-stream")
+
+
+@router.get("/sessions")
+def list_sessions(
+    chat_service=Depends(get_chat_service),
+    current_user: User = Depends(get_current_user),
+):
+    """List all chat sessions for the authenticated user."""
+    return chat_service.list_sessions(user_id=current_user.id)
+
+
+@router.get("/sessions/{session_id}/messages")
+def get_session_messages(
+    session_id: str,
+    chat_service=Depends(get_chat_service),
+    current_user: User = Depends(get_current_user),
+):
+    """Fetch messages for a specific session, securing it to the logged-in user."""
+    return chat_service.get_session_messages(session_id=session_id, user_id=current_user.id)
+
+
+@router.delete("/sessions/{session_id}")
+def delete_session(
+    session_id: str,
+    chat_service=Depends(get_chat_service),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete a chat session and its message history."""
+    success = chat_service.delete_session(session_id=session_id, user_id=current_user.id)
+    if not success:
+        return {"status": "error", "message": "Session not found or unauthorized"}
+    return {"status": "success", "message": "Session deleted"}
+

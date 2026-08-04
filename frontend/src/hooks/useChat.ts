@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { sendChatStream } from '../api/client'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  sendChatStream,
+  fetchChatSessions,
+  fetchChatSessionMessages,
+  deleteChatSession,
+  type ChatSessionItem,
+} from '../api/client'
 import type { Confidence, Message } from '../types'
 
 const SESSION_STORAGE_KEY = 'enterprise-rag-session'
@@ -36,7 +42,11 @@ export function useChat() {
   const [sessionId, setSessionId] = useState<string>(() => readSessionId())
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sessions, setSessions] = useState<ChatSessionItem[]>([])
+  const [loadingSessions, setLoadingSessions] = useState(false)
+  const initialSessionLoaded = useRef(false)
 
+  // Keep the active session ID in session storage.
   useEffect(() => {
     try {
       sessionStorage.setItem(SESSION_STORAGE_KEY, sessionId)
@@ -45,12 +55,63 @@ export function useChat() {
     }
   }, [sessionId])
 
+  const loadSessions = useCallback(async () => {
+    setLoadingSessions(true)
+    try {
+      const data = await fetchChatSessions()
+      setSessions(data)
+    } catch (err) {
+      // Silently catch session list loading errors
+    } finally {
+      setLoadingSessions(false)
+    }
+  }, [])
+
+  // Auto-fetch sessions on initial load
+  useEffect(() => {
+    loadSessions()
+  }, [loadSessions])
+
   const clearConversation = useCallback(() => {
     setMessages([])
     const nextSessionId = createSessionId()
     setSessionId(nextSessionId)
     setError(null)
   }, [])
+
+  const loadSession = useCallback(async (id: string) => {
+    setSending(true)
+    setError(null)
+    try {
+      const msgs = await fetchChatSessionMessages(id)
+      setMessages(msgs)
+      setSessionId(id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load conversation')
+    } finally {
+      setSending(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (initialSessionLoaded.current || loadingSessions || sessions.length === 0 || messages.length > 0) return
+    initialSessionLoaded.current = true
+
+    const savedSession = sessions.find((session) => session.id === sessionId)
+    void loadSession(savedSession?.id ?? sessions[0].id)
+  }, [loadSession, loadingSessions, messages.length, sessionId, sessions])
+
+  const removeSession = useCallback(async (id: string) => {
+    try {
+      await deleteChatSession(id)
+      setSessions((current) => current.filter((s) => s.id !== id))
+      if (sessionId === id) {
+        clearConversation()
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete conversation')
+    }
+  }, [sessionId, clearConversation])
 
   const sendMessage = useCallback(
     async (question: string, documentIds?: string[]) => {
@@ -121,6 +182,7 @@ export function useChat() {
                   confidence: response.confidence as Confidence,
                   evidence_status: response.evidence_status,
                   answer_style: response.answer_style,
+                  id: response.trace_id || message.id,
                   trace_id: response.trace_id,
                   follow_up_questions: response.follow_up_questions,
                   latency_ms: response.latency_ms,
@@ -129,6 +191,9 @@ export function useChat() {
               : message
           )
         )
+
+        // Refresh sessions list to show the updated timestamp or new session
+        await loadSessions()
       } catch (err) {
         const errMessage = err instanceof Error ? err.message : 'Failed to send message'
         setError(errMessage)
@@ -148,7 +213,7 @@ export function useChat() {
         setSending(false)
       }
     },
-    [sending, sessionId]
+    [sending, sessionId, loadSessions]
   )
 
   const assistantCount = useMemo(
@@ -161,9 +226,14 @@ export function useChat() {
     sending,
     error,
     sessionId,
+    sessions,
+    loadingSessions,
     assistantCount,
     sendMessage,
     clearConversation,
+    loadSession,
+    removeSession,
+    loadSessions,
     clearError: () => setError(null),
   }
 }

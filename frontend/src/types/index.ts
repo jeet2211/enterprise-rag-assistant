@@ -98,3 +98,19 @@ export interface HealthStats {
   processing_documents: number
   total_chunks: number
 }
+
+export interface WorkerHealthStats {
+  status: string
+  redis: string
+  celery: string
+  worker_count: number
+}
+
+export interface EvalSummary {
+  period_days: number
+  sample_count: number
+  faithfulness: number | null
+  answer_relevancy: number | null
+  context_precision: number | null
+  overall_score: number | null
+}

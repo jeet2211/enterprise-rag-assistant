@@ -4,8 +4,11 @@ import type {
   DocumentDetail,
   DocumentItem,
   FeedbackRequest,
+  EvalSummary,
   HealthStats,
+  Message,
   UploadResponse,
+  WorkerHealthStats,
 } from '../types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
@@ -192,4 +195,37 @@ export async function submitFeedback(payload: FeedbackRequest): Promise<void> {
 export async function fetchHealth(): Promise<HealthStats> {
   const response = await authFetch(`${API_BASE_URL}/health`)
   return parseJson<HealthStats>(response)
+}
+
+export async function fetchWorkerHealth(): Promise<WorkerHealthStats> {
+  const response = await authFetch(`${API_BASE_URL}/health/worker`)
+  return parseJson<WorkerHealthStats>(response)
+}
+
+export async function fetchEvalSummary(days = 7): Promise<EvalSummary> {
+  const response = await authFetch(`${API_BASE_URL}/evals/summary?days=${days}`)
+  return parseJson<EvalSummary>(response)
+}
+
+export interface ChatSessionItem {
+  id: string
+  title?: string
+  document_ids: string[]
+  created_at: string
+  updated_at: string
+}
+
+export async function fetchChatSessions(): Promise<ChatSessionItem[]> {
+  const response = await authFetch(`${API_BASE_URL}/chat/sessions`)
+  return parseJson<ChatSessionItem[]>(response)
+}
+
+export async function fetchChatSessionMessages(sessionId: string): Promise<Message[]> {
+  const response = await authFetch(`${API_BASE_URL}/chat/sessions/${sessionId}/messages`)
+  return parseJson<Message[]>(response)
+}
+
+export async function deleteChatSession(sessionId: string): Promise<void> {
+  const response = await authFetch(`${API_BASE_URL}/chat/sessions/${sessionId}`, { method: 'DELETE' })
+  await parseJson(response)
 }

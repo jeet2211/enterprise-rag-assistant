@@ -47,6 +47,21 @@ services:
       redis:
         condition: service_healthy
 
+  beat:
+    image: ghcr.io/jeet2211/enterprise-rag-backend:latest
+    restart: always
+    networks:
+      - rag-network
+      - deploy_internal
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql://raguser:${POSTGRES_PASSWORD}@postgres:5432/ragdb
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   frontend:
     image: ghcr.io/jeet2211/enterprise-rag-frontend:latest
     restart: always

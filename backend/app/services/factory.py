@@ -12,6 +12,7 @@ from app.rag.retriever import Retriever
 from app.services.chat_service import ChatService, SessionMemoryStore
 from app.services.document_service import DocumentService
 from app.services.embedding_service import EmbeddingService
+from app.services.eval_service import EvalService
 from app.services.pdf_service import PDFService
 from app.models.user import User  # noqa: F401
 
@@ -27,6 +28,7 @@ class AppServices:
     memory_store: SessionMemoryStore
     chat_service: ChatService | None
     pipeline: RAGPipeline
+    eval_service: EvalService
 
 
 def migrate_sqlite_schema(engine) -> None:
@@ -74,6 +76,7 @@ def build_app_services(settings: Settings, *, include_chat: bool = True) -> AppS
         ChatService(retriever, settings, memory_store, session_factory=session_factory) if include_chat else None
     )
     pipeline = RAGPipeline(pdf_service, embedding_service, retriever, document_service, settings)
+    eval_service = EvalService(session_factory)
 
     return AppServices(
         engine=engine,
@@ -85,4 +88,5 @@ def build_app_services(settings: Settings, *, include_chat: bool = True) -> AppS
         memory_store=memory_store,
         chat_service=chat_service,
         pipeline=pipeline,
+        eval_service=eval_service,
     )

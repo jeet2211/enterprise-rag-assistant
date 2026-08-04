@@ -8,6 +8,8 @@ import uuid
 from collections import defaultdict, deque
 from datetime import datetime
 
+from app.core.metrics import RAGMetrics
+from app.core.tracing import get_tracer
 from app.models.responses import Citation
 from app.rag.prompt import build_followup_prompt, build_prompt, build_verifier_prompt
 
@@ -91,6 +93,13 @@ def _route_question(question: str) -> str:
     return "general"
 
 
+def _is_document_summary_question(question: str) -> bool:
+    lower = question.lower()
+    summary_terms = ("summarize", "summary", "overview", "simple terms", "explain this document")
+    document_terms = ("document", "pdf", "book", "file", "it", "this")
+    return any(term in lower for term in summary_terms) and any(term in lower for term in document_terms)
+
+
 def _extract_key_terms(question: str) -> list[str]:
     terms = re.findall(r"\b[A-Z][A-Z0-9_]{2,}\b", question)
     # Only preserve explicitly technical tokens; generic words are too noisy
@@ -172,14 +181,14 @@ class ChatService:
 
     def _format_context(self, matches: list[dict[str, object]]) -> str:
         context_parts = []
-        for match in matches:
+        for idx, match in enumerate(matches, 1):
             metadata = match["metadata"] or {}
             document_name = str(metadata.get("document_name", "Unknown document"))
             page_number = int(metadata.get("page_number", 0))
             section_title = str(metadata.get("section_title", "")).strip()
             section_prefix = f"Section: {section_title} | " if section_title else ""
             text = self._trim_text(str(match["text"]), self.settings.chat_context_chunk_chars)
-            context_parts.append(f"[{document_name} p.{page_number}] {section_prefix}{text}")
+            context_parts.append(f"Source [{idx}]: [{document_name} p.{page_number}]\n{section_prefix}{text}")
         return "\n\n".join(context_parts)
 
     def _build_citations(self, matches: list[dict[str, object]]) -> list[Citation]:
@@ -232,6 +241,16 @@ class ChatService:
             mmr_lambda=mmr_lambda,
             max_chunks_per_page=self.settings.retrieval_max_chunks_per_page,
         )
+        if document_ids and _is_document_summary_question(question):
+            representative_matches = self.retriever.get_document_chunks(
+                document_ids,
+                limit=max(requested_top_k, self.settings.chat_context_top_k),
+            )
+            if representative_matches:
+                matches = representative_matches
+        elif document_ids and not matches:
+            matches = self.retriever.get_document_chunks(document_ids, limit=requested_top_k)
+
         # Keep the most relevant chunk first so the answer/verifier prompts
         # preserve the strongest evidence even when later chunks are truncated.
         matches = sorted(matches, key=lambda match: float(match["distance"]))
@@ -298,13 +317,29 @@ class ChatService:
         answer_style = "supported"
         follow_up_questions: list[str] = []
 
+        # --- Langfuse: open a trace for this request ---
+        tracer = get_tracer()
+        lf_trace = tracer.start_trace(
+            name="chat_answer",
+            session_id=session_id,
+            user_id=user_id,
+            input={"question": question},
+            metadata={"document_ids": document_ids},
+        )
+        if getattr(lf_trace, "id", "noop") != "noop":
+            trace_id = str(lf_trace.id)
+
         timings: dict[str, float] = {}
+
+        # Retrieval span
+        lf_retrieval = lf_trace.span(name="retrieval", input={"question": question})
         matches, citations, confidence = self._retrieve(
             question=question,
             top_k=top_k,
             document_ids=document_ids,
             timings=timings,
         )
+        lf_retrieval.end(output={"sources": len(citations), "confidence": confidence})
 
         # If confidence is not_found, skip LLM call entirely
         if confidence == "not_found":
@@ -327,9 +362,11 @@ class ChatService:
             else:
                 try:
                     t_stage = time.perf_counter()
+                    lf_llm = lf_trace.span(name="llm_generation", input={"question": question})
                     response = llm.invoke(prompt)
                     answer_text = response.content if hasattr(response, "content") else str(response)
                     self._record_timing(timings, "llm_answer_ms", t_stage)
+                    lf_llm.end(output={"answer_length": len(answer_text)})
                 except Exception as exc:
                     logger.error(
                         '{"event":"llm_error","trace_id":"%s","error":"%s"}',
@@ -348,9 +385,11 @@ class ChatService:
                         self._record_timing(timings, "followups_ms", t_stage)
                     if _should_run_verifier(confidence, self.settings.chat_llm_verifier_min_confidence):
                         t_stage = time.perf_counter()
+                        lf_verifier = lf_trace.span(name="verifier")
                         verifier = self._verify_answer(question=question, answer=answer_text, context=full_context)
                         self._record_timing(timings, "verifier_ms", t_stage)
                         evidence_status = str(verifier["evidence_status"])
+                        lf_verifier.end(output={"evidence_status": evidence_status})
                         if not bool(verifier["allow_answer"]):
                             answer_text = "I could not find this information in the uploaded documents."
                             follow_up_questions = []
@@ -364,6 +403,20 @@ class ChatService:
 
         latency_ms = round((time.perf_counter() - t_start) * 1000, 1)
         self.memory_store.add_turn(session_id, question, answer_text)
+
+        # --- Langfuse: close trace ---
+        lf_trace.end(output={"confidence": confidence, "evidence_status": evidence_status, "latency_ms": latency_ms})
+
+        # --- Prometheus metrics ---
+        RAGMetrics.record_chat(
+            confidence=confidence,
+            evidence_status=evidence_status,
+            answer_style=answer_style,
+            latency_ms=latency_ms,
+            retrieval_ms=timings.get("retrieval_ms"),
+            llm_ms=timings.get("llm_answer_ms"),
+            verifier_ms=timings.get("verifier_ms"),
+        )
 
         logger.info(
             '{"event":"chat_request","trace_id":"%s","session_id":"%s","confidence":"%s","sources":%d,"latency_ms":%s}',
@@ -423,12 +476,25 @@ class ChatService:
         answer_style = "supported"
         answer_parts: list[str] = []
 
+        tracer = get_tracer()
+        lf_trace = tracer.start_trace(
+            name="chat_answer_stream",
+            session_id=session_id,
+            user_id=user_id,
+            input={"question": question},
+            metadata={"document_ids": document_ids},
+        )
+        if getattr(lf_trace, "id", "noop") != "noop":
+            trace_id = str(lf_trace.id)
+
+        lf_retrieval = lf_trace.span(name="retrieval", input={"question": question})
         matches, citations, confidence = self._retrieve(
             question=question,
             top_k=top_k,
             document_ids=document_ids,
             timings=timings,
         )
+        lf_retrieval.end(output={"sources": len(citations), "confidence": confidence})
 
         yield {"event": "trace", "data": {"trace_id": trace_id, "confidence": confidence}}
 
@@ -452,6 +518,7 @@ class ChatService:
                 yield {"event": "token", "data": {"text": answer_text}}
             else:
                 t_stage = time.perf_counter()
+                lf_llm = lf_trace.span(name="llm_generation", input={"question": question})
                 try:
                     for chunk in llm.stream(prompt):
                         text = chunk.content if hasattr(chunk, "content") else str(chunk)
@@ -468,13 +535,16 @@ class ChatService:
                     else:
                         raise
                 self._record_timing(timings, "llm_answer_ms", t_stage)
+                lf_llm.end(output={"answer_length": len("".join(answer_parts))})
 
                 answer_text = "".join(answer_parts)
                 if _should_run_verifier(confidence, self.settings.chat_llm_verifier_min_confidence):
                     t_stage = time.perf_counter()
+                    lf_verifier = lf_trace.span(name="verifier")
                     verifier = self._verify_answer(question=question, answer=answer_text, context=full_context)
                     self._record_timing(timings, "verifier_ms", t_stage)
                     evidence_status = str(verifier["evidence_status"])
+                    lf_verifier.end(output={"evidence_status": evidence_status})
                     if not bool(verifier["allow_answer"]):
                         answer_text = "I could not find this information in the uploaded documents."
                         answer_parts[:] = [answer_text]
@@ -487,6 +557,7 @@ class ChatService:
         answer_text = "".join(answer_parts)
         latency_ms = round((time.perf_counter() - t_start) * 1000, 1)
         self.memory_store.add_turn(session_id, question, answer_text)
+        lf_trace.end(output={"confidence": confidence, "evidence_status": evidence_status, "latency_ms": latency_ms})
         if self.session_factory is not None:
             t_stage = time.perf_counter()
             self._persist_messages(
@@ -514,6 +585,17 @@ class ChatService:
             '{"event":"chat_timing","trace_id":"%s","timings":%s}',
             trace_id,
             json.dumps(timings, sort_keys=True),
+        )
+
+        # --- Prometheus metrics ---
+        RAGMetrics.record_chat(
+            confidence=confidence,
+            evidence_status=evidence_status,
+            answer_style=answer_style,
+            latency_ms=latency_ms,
+            retrieval_ms=timings.get("retrieval_ms"),
+            llm_ms=timings.get("llm_answer_ms"),
+            verifier_ms=timings.get("verifier_ms"),
         )
 
         yield {
@@ -634,3 +716,91 @@ class ChatService:
                 session.commit()
         except Exception as exc:
             logger.warning('{"event":"chat_persist_error","error":"%s"}', str(exc))
+
+    def list_sessions(self, user_id: str) -> list[dict]:
+        """List all chat sessions for the given user, ordered by last activity."""
+        if self.session_factory is None:
+            return []
+        try:
+            from app.models.db import ChatMessage, ChatSession
+            with self.session_factory() as session:
+                rows = (
+                    session.query(ChatSession)
+                    .filter(ChatSession.user_id == user_id)
+                    .order_by(ChatSession.updated_at.desc())
+                    .all()
+                )
+                
+                results = []
+                for r in rows:
+                    # Fetch first user question in this session to display as title
+                    first_msg = (
+                        session.query(ChatMessage)
+                        .filter(ChatMessage.session_id == r.id, ChatMessage.role == "user")
+                        .order_by(ChatMessage.created_at.asc())
+                        .first()
+                    )
+                    title = first_msg.content[:40] + "..." if first_msg and len(first_msg.content) > 40 else (first_msg.content if first_msg else "New Chat")
+                    
+                    results.append({
+                        "id": r.id,
+                        "title": title,
+                        "document_ids": json.loads(r.document_ids) if r.document_ids else [],
+                        "created_at": r.created_at.isoformat() if r.created_at else None,
+                        "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                    })
+                return results
+        except Exception as exc:
+            logger.warning('{"event":"list_sessions_error","error":"%s"}', str(exc))
+            return []
+
+    def get_session_messages(self, session_id: str, user_id: str) -> list[dict]:
+        """Fetch all messages for a session, checking authorization."""
+        if self.session_factory is None:
+            return []
+        try:
+            from app.models.db import ChatMessage, ChatSession
+            with self.session_factory() as session:
+                meta = session.get(ChatSession, session_id)
+                if not meta or meta.user_id != user_id:
+                    return []
+                rows = (
+                    session.query(ChatMessage)
+                    .filter(ChatMessage.session_id == session_id)
+                    .order_by(ChatMessage.created_at.asc())
+                    .all()
+                )
+                return [
+                    {
+                        "id": r.id,
+                        "role": r.role,
+                        "content": r.content,
+                        "citations": json.loads(r.citations) if r.citations else [],
+                        "confidence": r.confidence,
+                        "trace_id": r.trace_id,
+                        "latency_ms": r.latency_ms,
+                        "timestamp": r.created_at.isoformat() if r.created_at else None,
+                    }
+                    for r in rows
+                ]
+        except Exception as exc:
+            logger.warning('{"event":"get_session_messages_error","error":"%s"}', str(exc))
+            return []
+
+    def delete_session(self, session_id: str, user_id: str) -> bool:
+        """Delete a chat session and all its messages, checking authorization."""
+        if self.session_factory is None:
+            return False
+        try:
+            from app.models.db import ChatMessage, ChatSession
+            with self.session_factory() as session:
+                meta = session.get(ChatSession, session_id)
+                if not meta or meta.user_id != user_id:
+                    return False
+                session.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()
+                session.delete(meta)
+                session.commit()
+                return True
+        except Exception as exc:
+            logger.warning('{"event":"delete_session_error","error":"%s"}', str(exc))
+            return False

@@ -28,7 +28,7 @@ export function UploadZone({ onUpload, uploading, progress }: UploadZoneProps) {
 
   return (
     <div
-      className={`rounded-3xl border border-dashed px-4 py-5 transition ${
+      className={`rounded-2xl border border-dashed px-3 py-3 transition ${
         dragActive ? 'border-cyan-300 bg-cyan-300/10' : 'border-white/15 bg-white/5'
       }`}
       onDragOver={(event) => {
@@ -52,13 +52,10 @@ export function UploadZone({ onUpload, uploading, progress }: UploadZoneProps) {
           event.target.value = ''
         }}
       />
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-200/80">Upload PDF</p>
-          <h3 className="mt-2 text-lg font-semibold text-white">Drop a document or choose one to start chatting</h3>
-          <p className="mt-1 text-sm leading-6 text-slate-300">
-            Files are processed in the background, then indexed for grounded answers with citations.
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/80">Upload PDF</p>
+          <p className="mt-1 text-xs text-slate-400">Add a PDF to the library.</p>
         </div>
         <button
           type="button"
@@ -70,15 +67,15 @@ export function UploadZone({ onUpload, uploading, progress }: UploadZoneProps) {
         </button>
       </div>
 
-      <div className="mt-4">
-        <div className="h-2 overflow-hidden rounded-full bg-white/10">
+      <div className="mt-3">
+        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
           <div
             className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-sky-300 to-amber-300 transition-all duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>
         <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
-          <span>{uploading ? 'Uploading and processing...' : 'PDF only, max size configured in .env'}</span>
+          <span>{uploading ? 'Uploading and processing...' : 'PDF only'}</span>
           <span>{progress}%</span>
         </div>
       </div>

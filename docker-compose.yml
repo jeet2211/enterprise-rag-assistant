@@ -64,8 +64,7 @@ services:
     environment:
       UPLOAD_DIR: /app/backend/uploads
       CHROMA_PERSIST_DIR: /app/backend/chroma_db
-      # Stays as SQLite for local dev. Prod compose overrides this with Postgres.
-      DATABASE_URL: sqlite:////app/backend/data/app.db
+      DATABASE_URL: postgresql://raguser:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/ragdb
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
@@ -76,7 +75,6 @@ services:
     volumes:
       - backend_uploads:/app/backend/uploads
       - backend_chroma:/app/backend/chroma_db
-      - backend_sqlite:/app/backend/data
     networks:
       - rag-network
     depends_on:
@@ -127,8 +125,7 @@ services:
     environment:
       UPLOAD_DIR: /app/backend/uploads
       CHROMA_PERSIST_DIR: /app/backend/chroma_db
-      # Stays as SQLite for local dev. Prod compose overrides this with Postgres.
-      DATABASE_URL: sqlite:////app/backend/data/app.db
+      DATABASE_URL: postgresql://raguser:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/ragdb
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
@@ -137,7 +134,6 @@ services:
     volumes:
       - backend_uploads:/app/backend/uploads
       - backend_chroma:/app/backend/chroma_db
-      - backend_sqlite:/app/backend/data
     networks:
       - rag-network
     depends_on:
@@ -154,6 +150,52 @@ services:
           memory: 4G
         reservations:
           memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: enterprise-rag-backend:latest
+    container_name: rag-beat
+    restart: unless-stopped
+    command:
+      - celery
+      - -A
+      - app.tasks.celery_app.celery_app
+      - beat
+      - --loglevel=INFO
+    security_opt:
+      - no-new-privileges:true
+    cap_add:
+      - CHOWN
+    env_file:
+      - .env
+    environment:
+      UPLOAD_DIR: /app/backend/uploads
+      CHROMA_PERSIST_DIR: /app/backend/chroma_db
+      DATABASE_URL: postgresql://raguser:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/ragdb
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      ANONYMIZED_TELEMETRY: "False"
+      LOG_LEVEL: INFO
+    volumes:
+      - backend_uploads:/app/backend/uploads
+      - backend_chroma:/app/backend/chroma_db
+    networks:
+      - rag-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
     logging:
       driver: "json-file"
       options:

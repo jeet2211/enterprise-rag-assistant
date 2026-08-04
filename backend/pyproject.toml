@@ -47,3 +47,18 @@ pythonpath = [
     ".",
 ]
 asyncio_mode = "auto"
+
+[project]
+name = "enterprise-rag-backend"
+version = "2.0.0"
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "httpx>=0.28",
+    "faker>=26.0",
+]
+
